@@ -1,0 +1,459 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  admin
+  staff
+}
+
+enum CandidateStatus {
+  identified
+  analyzed
+  outline_sent
+  contract_sent
+  contract_signed
+  certification_in_progress
+  certified
+  dropped
+}
+
+enum WaitingFor {
+  candidate
+  court
+  speak2
+}
+
+enum DocumentType {
+  cv
+  contract_unsigned
+  contract_signed
+  apostille
+  language_certificate
+  legal_language_cert
+  sample_translation
+  embassy_letter
+  court_application
+  court_correspondence
+  other
+}
+
+enum DocumentStatus {
+  received
+  requested
+  missing_critical
+  not_required
+}
+
+enum CommunicationDirection {
+  outbound
+  inbound
+}
+
+enum CommunicationChannel {
+  email
+  phone
+  letter
+  other
+}
+
+enum CommunicationStatus {
+  draft
+  pending_approval
+  scheduled
+  sent
+  delivered
+  bounced
+  failed
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum TaskStatus {
+  pending
+  snoozed
+  done
+  cancelled
+}
+
+enum FinancialRecordType {
+  investment
+  revenue
+}
+
+enum ContractStatus {
+  draft
+  sent
+  signed
+  expired
+  terminated
+}
+
+enum BundeslandDifficulty {
+  easy
+  medium
+  complex
+}
+
+enum AiQueueStatus {
+  pending
+  applied
+  rejected
+}
+
+// ─────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  fullName    String
+  role        UserRole @default(staff)
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  lastLoginAt DateTime?
+
+  // Relations
+  assignedCandidates  Candidate[]       @relation("AssignedTo")
+  pipelineEvents      PipelineEvent[]   @relation("TriggeredBy")
+  uploadedDocuments   Document[]        @relation("UploadedBy")
+  approvedComms       Communication[]   @relation("ApprovedBy")
+  createdComms        Communication[]   @relation("CreatedBy")
+  createdTasks        Task[]            @relation("CreatedBy")
+  assignedTasks       Task[]            @relation("AssignedTo")
+  completedTasks      Task[]            @relation("CompletedBy")
+  financialRecords    FinancialRecord[]
+  createdContracts    Contract[]
+  updatedBundesland   BundeslandRule[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// BUNDESLAND RULES (Legal Knowledge Base)
+// ─────────────────────────────────────────────
+
+model BundeslandRule {
+  id                    String               @id @default(uuid())
+  bundeslandCode        String               @unique // "BY", "SA", "SN", etc.
+  bundeslandName        String               // "Bayern"
+  certificationName     String               // "Ermächtigung" or "Beeidigung"
+  difficulty            BundeslandDifficulty @default(medium)
+  hasExceptionRule      Boolean              @default(false)
+  responsibleAuthority  String               // "Landgericht" / "OLG" / etc.
+  courtName             String?
+  courtAddress          String?
+  courtContact          String?              // name, phone, email as text
+  legalBasisCitation    String?              // "§142 Abs. 3 ZPO"
+  applicationProcess    String?              // free-text description
+  estimatedDurationDays Int?
+  typicalCostMin        Int?                 // EUR
+  typicalCostMax        Int?                 // EUR
+  specialNotes          String?
+  ruleConfig            Json?                // structured requirements as JSON
+  lastUpdatedAt         DateTime             @default(now())
+  updatedById           String?
+  updatedBy             User?                @relation(fields: [updatedById], references: [id])
+
+  // Relations
+  candidates            Candidate[]
+  documentRequirements  DocumentRequirement[]
+
+  @@map("bundesland_rules")
+}
+
+model DocumentRequirement {
+  id              String         @id @default(uuid())
+  bundeslandId    String
+  bundesland      BundeslandRule @relation(fields: [bundeslandId], references: [id], onDelete: Cascade)
+  documentType    DocumentType
+  isMandatory     Boolean        @default(true)
+  notes           String?
+
+  @@unique([bundeslandId, documentType])
+  @@map("document_requirements")
+}
+
+// ─────────────────────────────────────────────
+// CANDIDATES
+// ─────────────────────────────────────────────
+
+model Candidate {
+  id                String          @id @default(uuid())
+  candidateRef      String          @unique // "SP-2026-001"
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  nativeLanguage    String          // "Usbekisch"
+  languagePair      String          // "Usbekisch ↔ Deutsch"
+  countryOfOrigin   String?
+  currentCity       String?
+  bundeslandId      String?
+  bundesland        BundeslandRule? @relation(fields: [bundeslandId], references: [id])
+  targetCourt       String?
+  deutschLevel      String?         // "C1", "C2", "B2"
+  educationLevel    String?         // "Bachelor", "Master", etc.
+  hasTranslationExp Boolean         @default(false)
+  translationYears  Int?
+  source            String?         // "LinkedIn", "Empfehlung", etc.
+  dateOfBirth       DateTime?
+  fullAddress       String?         // komplette Adresse
+  residencePermit   String?         // "Niederlassungserlaubnis", "Aufenthaltserlaubnis §18b" etc.
+  onboardingCompletedAt DateTime?   // null = erstes Login noch nicht abgeschlossen
+  status            CandidateStatus @default(identified)
+  waitingFor        WaitingFor      @default(speak2)
+  assignedToId      String?
+  assignedTo        User?           @relation("AssignedTo", fields: [assignedToId], references: [id])
+  notes             String?
+  dropReason        String?
+  automationPaused  Boolean         @default(false)
+  automationPausedUntil DateTime?
+  identifiedAt      DateTime        @default(now())
+  analyzedAt        DateTime?
+  outlineSentAt     DateTime?
+  contractSentAt    DateTime?
+  contractSignedAt  DateTime?
+  certificationStartedAt DateTime?
+  certifiedAt       DateTime?
+  droppedAt         DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Relations
+  pipelineEvents    PipelineEvent[]
+  documents         Document[]
+  documentChecklist DocumentChecklist[]
+  communications    Communication[]
+  tasks             Task[]
+  financialRecords  FinancialRecord[]
+  contracts         Contract[]
+  aiUpdates         AiUpdateQueue[]
+
+  @@map("candidates")
+}
+
+// ─────────────────────────────────────────────
+// PIPELINE EVENTS (Audit Log — never delete)
+// ─────────────────────────────────────────────
+
+model PipelineEvent {
+  id            String          @id @default(uuid())
+  candidateId   String
+  candidate     Candidate       @relation(fields: [candidateId], references: [id])
+  fromStatus    CandidateStatus?
+  toStatus      CandidateStatus
+  triggeredById String?
+  triggeredBy   User?           @relation("TriggeredBy", fields: [triggeredById], references: [id])
+  isAutomated   Boolean         @default(false)
+  notes         String?
+  createdAt     DateTime        @default(now())
+
+  @@map("pipeline_events")
+}
+
+// ─────────────────────────────────────────────
+// DOCUMENTS
+// ─────────────────────────────────────────────
+
+model Document {
+  id            String         @id @default(uuid())
+  candidateId   String
+  candidate     Candidate      @relation(fields: [candidateId], references: [id])
+  documentType  DocumentType
+  displayName   String
+  storagePath   String         // Supabase Storage path
+  mimeType      String?
+  fileSizeBytes Int?
+  uploadedById  String?
+  uploadedBy    User?          @relation("UploadedBy", fields: [uploadedById], references: [id])
+  notes         String?
+  uploadedAt    DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+
+  // Relations
+  contract      Contract?
+
+  @@map("documents")
+}
+
+model DocumentChecklist {
+  id            String         @id @default(uuid())
+  candidateId   String
+  candidate     Candidate      @relation(fields: [candidateId], references: [id])
+  documentType  DocumentType
+  status        DocumentStatus @default(missing_critical)
+  notes         String?
+  requestedAt   DateTime?
+  receivedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([candidateId, documentType])
+  @@map("document_checklists")
+}
+
+// ─────────────────────────────────────────────
+// EMAIL TEMPLATES
+// ─────────────────────────────────────────────
+
+model EmailTemplate {
+  id              String   @id @default(uuid())
+  slug            String   @unique // "outline_introduction", "contract_followup_1"
+  name            String
+  description     String?
+  subjectTmpl     String   // Handlebars: "Informationen zu Ihrer Ermächtigung als {{sprache}}-Übersetzer"
+  bodyHtmlTmpl    String
+  triggerStatus   CandidateStatus? // auto-suggest when candidate enters this status
+  autoSend        Boolean  @default(false) // true = no human approval required
+  language        String   @default("de")
+  version         Int      @default(1)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  communications  Communication[]
+
+  @@map("email_templates")
+}
+
+// ─────────────────────────────────────────────
+// COMMUNICATIONS (Email history)
+// ─────────────────────────────────────────────
+
+model Communication {
+  id                String                 @id @default(uuid())
+  candidateId       String
+  candidate         Candidate              @relation(fields: [candidateId], references: [id])
+  direction         CommunicationDirection @default(outbound)
+  channel           CommunicationChannel   @default(email)
+  subject           String?
+  bodyHtml          String?
+  bodyText          String?
+  fromAddress       String?
+  toAddresses       String[]
+  ccAddresses       String[]               @default([])
+  resendMessageId   String?                // Resend's tracking ID
+  status            CommunicationStatus    @default(draft)
+  templateId        String?
+  template          EmailTemplate?         @relation(fields: [templateId], references: [id])
+  approvedById      String?
+  approvedBy        User?                  @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvedAt        DateTime?
+  sentAt            DateTime?
+  createdById       String?
+  createdBy         User?                  @relation("CreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime               @default(now())
+
+  @@map("communications")
+}
+
+// ─────────────────────────────────────────────
+// TASKS (Reminders & Follow-ups)
+// ─────────────────────────────────────────────
+
+model Task {
+  id            String       @id @default(uuid())
+  candidateId   String?
+  candidate     Candidate?   @relation(fields: [candidateId], references: [id])
+  assignedToId  String?
+  assignedTo    User?        @relation("AssignedTo", fields: [assignedToId], references: [id])
+  title         String
+  description   String?
+  dueAt         DateTime
+  priority      TaskPriority @default(medium)
+  status        TaskStatus   @default(pending)
+  isAutomated   Boolean      @default(false)
+  snoozeUntil   DateTime?
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User?        @relation("CompletedBy", fields: [completedById], references: [id])
+  createdById   String?
+  createdBy     User?        @relation("CreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime     @default(now())
+
+  @@map("tasks")
+}
+
+// ─────────────────────────────────────────────
+// FINANCIALS
+// ─────────────────────────────────────────────
+
+model FinancialRecord {
+  id              String              @id @default(uuid())
+  candidateId     String
+  candidate       Candidate           @relation(fields: [candidateId], references: [id])
+  recordType      FinancialRecordType
+  category        String              // "Gerichtsgebühr", "Apostille", "Dolmetschen", etc.
+  amountEur       Decimal             @db.Decimal(10, 2)
+  speak2ShareEur  Decimal?            @db.Decimal(10, 2) // for revenue: speak2's cut
+  description     String?
+  invoiceRef      String?
+  receiptPath     String?             // storage path for receipt
+  occurredAt      DateTime
+  recordedById    String?
+  recordedBy      User?               @relation(fields: [recordedById], references: [id])
+  createdAt       DateTime            @default(now())
+
+  @@map("financial_records")
+}
+
+// ─────────────────────────────────────────────
+// CONTRACTS
+// ─────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// AI UPDATE QUEUE
+// ─────────────────────────────────────────────
+
+model AiUpdateQueue {
+  id          String        @id @default(uuid())
+  candidateId String
+  candidate   Candidate     @relation(fields: [candidateId], references: [id])
+  message     String        // Freitext vom Mitarbeiter
+  authorName  String        // Wer hat es geschrieben
+  status      AiQueueStatus @default(pending)
+  appliedAt   DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@map("ai_update_queue")
+}
+
+model Contract {
+  id                String         @id @default(uuid())
+  candidateId       String
+  candidate         Candidate      @relation(fields: [candidateId], references: [id])
+  contractType      String         @default("cooperation_4year")
+  status            ContractStatus @default(draft)
+  revenueSharePct   Int            @default(25)   // speak2's share (interpreting)
+  translationRates  Json?          // {"per_page": 0.12, "minimum": 10.00}
+  sentAt            DateTime?
+  signedAt          DateTime?
+  expiresAt         DateTime?
+  esignatureRef     String?        // GetAccept reference
+  documentId        String?        @unique
+  document          Document?      @relation(fields: [documentId], references: [id])
+  createdById       String?
+  createdBy         User?          @relation(fields: [createdById], references: [id])
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@map("contracts")
+}
