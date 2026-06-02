@@ -28,8 +28,10 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     // For MVP: check password hash stored in a separate table or env
     // In production: use bcrypt
     const passwordHash = hashPassword(password)
-    const storedHash = process.env[`USER_HASH_${email.replace('@', '_AT_').replace('.', '_DOT_')}`]
-      || hashPassword('admin123') // default dev password
+
+    // Per-user passwords via env vars, fallback to admin123
+    const envKey = `USER_HASH_${email.replace(/[@.]/g, c => c === '@' ? '_AT_' : '_DOT_')}`
+    const storedHash = process.env[envKey] || hashPassword('admin123')
 
     if (passwordHash !== storedHash) {
       return reply.code(401).send({ error: 'Ungültige E-Mail oder Passwort' })

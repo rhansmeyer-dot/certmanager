@@ -500,10 +500,22 @@ export default function PortalPage() {
 
   if (error || !profile) return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl p-8 text-center max-w-sm">
-        <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-        <h1 className="font-bold text-gray-900 mb-2">Link ungültig oder abgelaufen</h1>
-        <p className="text-sm text-gray-500">Bitte wenden Sie sich an speak2: <a href="mailto:info@speak2.de" className="text-blue-600 underline">info@speak2.de</a></p>
+      <div className="bg-white rounded-2xl p-8 text-center max-w-sm shadow-sm">
+        <AlertCircle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+        <h1 className="font-bold text-gray-900 mb-2">Link nicht gefunden</h1>
+        <p className="text-sm text-gray-600 mb-4">
+          Dieser Link ist möglicherweise abgelaufen oder wurde bereits verwendet.
+        </p>
+        <div className="bg-gray-50 rounded-xl p-4 text-left text-sm text-gray-600 space-y-2">
+          <p>💡 <strong>Was Sie tun können:</strong></p>
+          <p>• Prüfen Sie ob Sie den vollständigen Link aus der E-Mail kopiert haben</p>
+          <p>• Bitten Sie speak2 um einen neuen Zugangslink</p>
+        </div>
+        <a href="mailto:info@speak2.de?subject=Neuer%20Portal-Zugang%20benötigt"
+          className="mt-4 block w-full bg-blue-600 text-white py-2.5 rounded-xl font-medium text-sm hover:bg-blue-700 transition-colors">
+          ✉️ Neuen Link anfordern
+        </a>
+        <p className="text-xs text-gray-400 mt-3">speak2 · info@speak2.de</p>
       </div>
     </div>
   )

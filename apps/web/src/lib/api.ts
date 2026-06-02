@@ -83,7 +83,7 @@ export const communicationsApi = {
 
 // ─── Tasks ──────────────────────────────────────────────────────────────────
 export const tasksApi = {
-  list: (params?: Record<string, string>) =>
+  list: (params?: Record<string, string | undefined>) =>
     api.get('/tasks', { params }).then((r) => r.data),
   create: (data: any) => api.post('/tasks', data).then((r) => r.data),
   complete: (id: string) => api.patch(`/tasks/${id}/complete`).then((r) => r.data),
@@ -112,6 +112,7 @@ export const portalApi = {
 
 // ─── AI Updates ─────────────────────────────────────────────────────────────
 export const aiApi = {
+  queue: () => api.get('/ai/queue').then((r) => r.data),
   update: (candidateId: string, message: string) =>
     api.post(`/ai/candidates/${candidateId}/update`, { message }).then((r) => r.data),
   confirm: (candidateId: string, data: {
