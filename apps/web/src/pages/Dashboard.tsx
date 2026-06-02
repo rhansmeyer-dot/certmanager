@@ -136,14 +136,14 @@ export default function DashboardPage() {
           <Bot className="w-5 h-5 text-amber-600 flex-shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-900">
-              🤖 {aiQueue.length} Mitarbeiter-Update{aiQueue.length > 1 ? 's' : ''} warten auf Verarbeitung
+              🤖 {aiQueue.length} neue Mitarbeiter-Updates warten auf Verarbeitung
             </p>
             <p className="text-xs text-amber-700 mt-0.5">
               {aiQueue.map((q: any) => `${q.candidate?.firstName} ${q.candidate?.lastName}`).join(', ')}
             </p>
           </div>
-          <span className="text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded-full font-medium">
-            Schreib „neue updates?" im Chat
+          <span className="text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded-full font-medium cursor-default">
+            Jetzt verarbeiten
           </span>
         </div>
       )}
