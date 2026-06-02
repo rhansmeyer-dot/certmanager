@@ -1,11 +1,257 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Scale, ChevronRight, ChevronLeft, CheckCircle, Loader2 } from 'lucide-react'
+import { Scale, ChevronRight, ChevronLeft, CheckCircle, Loader2, Plus, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
+// ── Umfassende Sprachliste (alphabetisch) ──────────────────────────────────
+const ALL_LANGUAGES = [
+  'Albanisch','Amharisch','Arabisch','Armenisch','Aserbaidschanisch',
+  'Bengalisch','Bosnisch','Bulgarisch',
+  'Chinesisch (Mandarin)','Chinesisch (Kantonesisch)',
+  'Dari','Deutsch',
+  'Englisch','Estnisch',
+  'Farsi (Persisch)','Finnisch','Französisch',
+  'Georgisch','Griechisch','Gujarati',
+  'Haussa','Hebräisch','Hindi','Hmong',
+  'Igbo','Indonesisch',
+  'Japanisch',
+  'Kannada','Kasachisch','Katalanisch','Khmer','Kirgisisch','Koreanisch','Kroatisch','Kurdisch (Kurmandschi)','Kurdisch (Sorani)',
+  'Laotisch','Lettisch','Litauisch',
+  'Malagasy','Malayisch','Marathi','Mazedonisch','Mongolisch',
+  'Nepalesisch','Niederländisch','Norwegisch',
+  'Paschtu','Polnisch','Portugiesisch',
+  'Rumänisch','Russisch',
+  'Serbisch','Singhalesisch','Slowakisch','Slowenisch','Somali','Spanisch','Suaheli',
+  'Tadschikisch','Tamil','Telugu','Tigrinya','Tschechisch','Tschetschenisch','Türkisch','Turkmenisch',
+  'Ukrainisch','Ungarisch','Urdu','Usbekisch',
+  'Vietnamesisch',
+  'Weißrussisch',
+  'Yoruba',
+  'Andere (bitte angeben)',
+].sort((a, b) => a.localeCompare(b, 'de'))
+
+const LANGUAGE_LEVELS = [
+  { value: 'L1', label: 'Muttersprache (L1)' },
+  { value: 'C2', label: 'C2 — Annähernd muttersp.' },
+  { value: 'C1', label: 'C1 — Fachkundige Kenntnis' },
+  { value: 'B2', label: 'B2 — Selbstständige Nutzung' },
+  { value: 'B1', label: 'B1 — Mittelstufe' },
+  { value: 'A2', label: 'A2 — Grundlegende Kenntnisse' },
+  { value: 'A1', label: 'A1 — Anfänger' },
+]
+
+const EDUCATION_LEVELS_IN_LANGUAGE = [
+  { value: 'studium', label: 'Studium (Hochschulabschluss)' },
+  { value: 'abitur', label: 'Abitur / Matura (12+ Schuljahre)' },
+  { value: 'realschule', label: 'Realschule / Mittelschule (9-10 J.)' },
+  { value: 'grundschule', label: 'Grundschule (1-4 J.) oder weniger' },
+  { value: 'keine', label: 'Keine Schulbildung in dieser Sprache' },
+]
+
+const CERT_TYPES: Record<string, string[]> = {
+  'Deutsch': ['telc Deutsch', 'Goethe-Institut', 'TestDaF', 'DSH', 'ÖSD', 'BULATS', 'Sonstiges'],
+  'Englisch': ['IELTS', 'TOEFL', 'Cambridge (FCE/CAE/CPE)', 'TOEIC', 'Sonstiges'],
+  'default': ['Staatliche Prüfung', 'Universitätszertifikat', 'ECL', 'CILS', 'DELE', 'DELF', 'Sonstiges'],
+}
+
+// ── Suchbares Sprach-Dropdown ──────────────────────────────────────────────
+function LanguageDropdown({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState(value || '')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => { setSearch(value || '') }, [value])
+
+  const filtered = search.length === 0
+    ? ALL_LANGUAGES
+    : ALL_LANGUAGES.filter(l => l.toLowerCase().startsWith(search.toLowerCase()))
+      .concat(ALL_LANGUAGES.filter(l => !l.toLowerCase().startsWith(search.toLowerCase()) && l.toLowerCase().includes(search.toLowerCase())))
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        value={search}
+        onChange={e => { setSearch(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder || 'Sprache eingeben oder wählen…'}
+        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {filtered.slice(0, 50).map(lang => (
+            <button
+              key={lang}
+              type="button"
+              onMouseDown={() => { onChange(lang); setSearch(lang); setOpen(false) }}
+              className={cn('w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors',
+                lang === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-800')}
+            >
+              {lang}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Sprach-Eintrag Komponente ──────────────────────────────────────────────
+type LangEntry = {
+  language: string
+  level: string
+  // Für L1:
+  educationInLanguage: string    // studium/abitur/realschule/grundschule/keine
+  educationCountry: string       // In welchem Land?
+  ageArrivedGermany: string      // Alter bei Ankunft in DE (wenn L1)
+  // Für andere Level:
+  hasCertificate: boolean
+  certificateType: string
+}
+
+const EMPTY_LANG: LangEntry = {
+  language: '', level: '', educationInLanguage: '', educationCountry: '',
+  ageArrivedGermany: '', hasCertificate: false, certificateType: '',
+}
+
+function LangEntryForm({ entry, index, onChange, onRemove, isFirst }: {
+  entry: LangEntry; index: number; onChange: (e: LangEntry) => void; onRemove?: () => void; isFirst: boolean
+}) {
+  const isNative = entry.level === 'L1'
+  const weakProof = isNative && entry.educationInLanguage === 'keine'
+  const earlyArrival = isNative && entry.ageArrivedGermany !== '' && Number(entry.ageArrivedGermany) <= 8
+
+  return (
+    <div className={cn('border rounded-xl p-4 space-y-3', index === 0 ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200 bg-white')}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {index === 0 ? '1. Sprache (Hauptsprache)' : `${index + 1}. Sprache`}
+        </span>
+        {onRemove && (
+          <button onClick={onRemove} className="text-gray-400 hover:text-red-500 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Sprache */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="block text-xs font-medium text-gray-600">Sprache *</label>
+          <LanguageDropdown value={entry.language} onChange={v => onChange({ ...entry, language: v })} />
+        </div>
+        <div className="space-y-1">
+          <label className="block text-xs font-medium text-gray-600">Niveau *</label>
+          <select
+            value={entry.level}
+            onChange={e => onChange({ ...entry, level: e.target.value })}
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">— wählen —</option>
+            {LANGUAGE_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Nachweis-Fragen für Muttersprache */}
+      {isNative && entry.language && (
+        <div className="space-y-3 border-t border-blue-100 pt-3">
+          <p className="text-xs font-semibold text-blue-700">📋 Nachweis für {entry.language}:</p>
+
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-600">
+              Höchste abgeschlossene Schulbildung <strong>in {entry.language}</strong> *
+            </label>
+            <select
+              value={entry.educationInLanguage}
+              onChange={e => onChange({ ...entry, educationInLanguage: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— bitte wählen —</option>
+              {EDUCATION_LEVELS_IN_LANGUAGE.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+            </select>
+          </div>
+
+          {entry.educationInLanguage && entry.educationInLanguage !== 'keine' && (
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-600">In welchem Land war diese Schule/Uni? *</label>
+              <input
+                value={entry.educationCountry}
+                onChange={e => onChange({ ...entry, educationCountry: e.target.value })}
+                placeholder="z.B. Usbekistan, Ukraine, Iran…"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-600">
+              Mit wie vielen Jahren sind Sie nach Deutschland gezogen?
+              <span className="text-gray-400 ml-1">(0 = in Deutschland geboren)</span>
+            </label>
+            <input
+              type="number"
+              value={entry.ageArrivedGermany}
+              onChange={e => onChange({ ...entry, ageArrivedGermany: e.target.value })}
+              placeholder="z.B. 15"
+              min={0} max={60}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Warnung: Schwacher Nachweis */}
+          {(weakProof || earlyArrival) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+              ⚠️ <strong>Wichtiger Hinweis:</strong>{' '}
+              {earlyArrival && `Sie kamen mit ${entry.ageArrivedGermany} Jahren nach Deutschland — für Gerichte ist der Nachweis der Sprachkompetenz dann schwieriger. `}
+              {weakProof && `Ohne formale Schulbildung in ${entry.language} fehlt ein wichtiger Nachweis. `}
+              Bitte geben Sie trotzdem alle Informationen an — wir beraten Sie dann individuell.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Nachweis für nicht-Muttersprachen */}
+      {!isNative && entry.level && entry.language && (
+        <div className="space-y-2 border-t border-gray-100 pt-3">
+          <p className="text-xs font-semibold text-gray-600">📋 Nachweis für {entry.language} ({entry.level}):</p>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={entry.hasCertificate}
+              onChange={e => onChange({ ...entry, hasCertificate: e.target.checked })}
+              className="rounded text-blue-600"
+            />
+            <span className="text-sm text-gray-700">Ich habe ein offizielles Sprachzertifikat</span>
+          </label>
+          {entry.hasCertificate && (
+            <select
+              value={entry.certificateType}
+              onChange={e => onChange({ ...entry, certificateType: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Zertifikat wählen —</option>
+              {(CERT_TYPES[entry.language] || CERT_TYPES['default']).map(c =>
+                <option key={c} value={c}>{c}</option>
+              )}
+            </select>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const STEPS = [
-  { id: 1, title: 'Ihre Sprache',      sub: 'Muttersprache und Deutschkenntnisse' },
+  { id: 1, title: 'Sprachkenntnisse', sub: 'Alle Ihre Sprachen und Nachweise' },
   { id: 2, title: 'Ihr Wohnort',       sub: 'Bundesland und Herkunft' },
   { id: 3, title: 'Ihre Qualifikation',sub: 'Ausbildung und Erfahrung' },
   { id: 4, title: 'Kontaktdaten',      sub: 'Damit wir Sie erreichen können' },
@@ -24,8 +270,9 @@ const DEGREE_OPTIONS = [
 ]
 
 type Form = {
-  nativeLanguage: string
+  languages: LangEntry[]         // alle Sprachen außer Deutsch
   deutschLevel: string
+  deutschCert: string
   yearsInGermany: string
   germanCitizen: boolean
   citizenshipYear: string
@@ -46,7 +293,8 @@ type Form = {
 }
 
 const EMPTY: Form = {
-  nativeLanguage: '', deutschLevel: '', yearsInGermany: '', germanCitizen: false,
+  languages: [{ ...EMPTY_LANG }],
+  deutschLevel: '', deutschCert: '', yearsInGermany: '', germanCitizen: false,
   citizenshipYear: '', currentCity: '', bundeslandCode: '', countryOfOrigin: '',
   highestDegree: '', degreeField: '', degreeCountry: '', degreeYear: '',
   hasTranslationExp: false, translationYears: '', additionalInfo: '',
@@ -118,8 +366,25 @@ export default function IntakePage() {
     setForm(f => ({ ...f, [field]: value }))
   }
 
+  function updateLang(i: number, entry: LangEntry) {
+    const langs = [...form.languages]
+    langs[i] = entry
+    setForm(f => ({ ...f, languages: langs }))
+  }
+
+  function addLang() {
+    setForm(f => ({ ...f, languages: [...f.languages, { ...EMPTY_LANG }] }))
+  }
+
+  function removeLang(i: number) {
+    setForm(f => ({ ...f, languages: f.languages.filter((_, idx) => idx !== i) }))
+  }
+
   function canNext() {
-    if (step === 1) return form.nativeLanguage && form.deutschLevel && form.yearsInGermany
+    if (step === 1) {
+      const hasValidLang = form.languages.some(l => l.language && l.level)
+      return hasValidLang && form.deutschLevel && form.yearsInGermany
+    }
     if (step === 2) return form.currentCity && form.bundeslandCode && form.countryOfOrigin
     if (step === 3) return form.highestDegree && form.degreeField && form.degreeCountry
     if (step === 4) return form.firstName && form.lastName && form.email
@@ -127,8 +392,13 @@ export default function IntakePage() {
   }
 
   function handleSubmit() {
+    // Hauptsprache aus dem ersten Eintrag ableiten
+    const mainLang = form.languages[0]
     mutation.mutate({
       ...form,
+      nativeLanguage:  mainLang?.language || '',
+      languagePair:    `${mainLang?.language || ''} ↔ Deutsch`,
+      languageDetails: JSON.stringify(form.languages), // alle Sprachen als JSON
       yearsInGermany:  Number(form.yearsInGermany) || 0,
       translationYears: form.hasTranslationExp ? (Number(form.translationYears) || 0) : undefined,
       degreeYear:      form.degreeYear ? Number(form.degreeYear) : undefined,
@@ -199,18 +469,58 @@ export default function IntakePage() {
           <h2 className="text-lg font-bold text-gray-900 mb-0.5">{STEPS[step-1].title}</h2>
           <p className="text-sm text-gray-500 mb-6">{STEPS[step-1].sub}</p>
 
-          {/* ── Step 1: Sprache ── */}
+          {/* ── Step 1: Sprachkenntnisse ── */}
           {step === 1 && (
             <div className="space-y-4">
-              <Field label="Muttersprache" required hint="z.B. Usbekisch, Tigrinya, Tamil, Georgisch, Farsi">
-                <Input value={form.nativeLanguage} onChange={(v: string) => set('nativeLanguage', v)} placeholder="z.B. Usbekisch" required />
-              </Field>
-              <Field label="Ihr Deutsch-Niveau" required>
-                <Select value={form.deutschLevel} onChange={(v: string) => set('deutschLevel', v)} options={DEUTSCH_LEVELS} placeholder="— bitte wählen —" />
-              </Field>
+              {/* Sprachen */}
+              <div className="space-y-3">
+                {form.languages.map((entry, i) => (
+                  <LangEntryForm
+                    key={i}
+                    entry={entry}
+                    index={i}
+                    isFirst={i === 0}
+                    onChange={e => updateLang(i, e)}
+                    onRemove={i > 0 ? () => removeLang(i) : undefined}
+                  />
+                ))}
+                {form.languages.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={addLang}
+                    className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Weitere Sprache hinzufügen
+                  </button>
+                )}
+              </div>
+
+              <div className="border-t border-gray-200 pt-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Deutsch</p>
+
+                <Field label="Ihr Deutsch-Niveau" required>
+                  <Select value={form.deutschLevel} onChange={(v: string) => set('deutschLevel', v)} options={DEUTSCH_LEVELS} placeholder="— bitte wählen —" />
+                </Field>
+
+                {form.deutschLevel && form.deutschLevel !== 'Muttersprachlich' && (
+                  <Field label="Haben Sie ein Deutschzertifikat?" hint="z.B. telc, Goethe, TestDaF, DSH">
+                    <select
+                      value={form.deutschCert}
+                      onChange={e => set('deutschCert', e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">— Kein Zertifikat / wählen —</option>
+                      {CERT_TYPES['Deutsch'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </Field>
+                )}
+              </div>
+
               <Field label="Wie viele Jahre leben Sie schon in Deutschland?" required>
                 <Input value={form.yearsInGermany} onChange={(v: string) => set('yearsInGermany', v)} type="number" placeholder="z.B. 5" required />
               </Field>
+
               <Field label="Staatsbürgerschaft">
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 cursor-pointer">
