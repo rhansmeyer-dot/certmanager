@@ -8,7 +8,7 @@
 import { FastifyPluginAsync } from 'fastify'
 import { createHash } from 'crypto'
 import { extname } from 'path'
-import { getStorage, DOCUMENTS_BUCKET } from '../lib/storage'
+import { storageConfigured, uploadObject, createSignedUrl } from '../lib/storage'
 
 // Token generieren (URL-safe)
 function makeToken(candidateId: string): string {
@@ -270,8 +270,7 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
     const candidate = await fastify.prisma.candidate.findUnique({ where: { id: candidateId } })
     if (!candidate) return reply.code(404).send({ error: 'Nicht gefunden' })
 
-    const storage = getStorage()
-    if (!storage) return reply.code(503).send({ error: 'Dokument-Upload derzeit nicht verfügbar (Storage nicht konfiguriert).' })
+    if (!storageConfigured()) return reply.code(503).send({ error: 'Dokument-Upload derzeit nicht verfügbar (Storage nicht konfiguriert).' })
 
     // Multipart File
     const data = await request.file()
@@ -284,9 +283,7 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
 
     const buffer = await data.toBuffer()
 
-    const { error: upErr } = await storage.storage
-      .from(DOCUMENTS_BUCKET)
-      .upload(objectPath, buffer, { contentType: data.mimetype, upsert: false })
+    const { error: upErr } = await uploadObject(objectPath, buffer, data.mimetype)
     if (upErr) {
       fastify.log.error({ err: upErr }, 'Supabase Storage upload failed')
       return reply.code(500).send({ error: 'Upload fehlgeschlagen' })
@@ -328,15 +325,12 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
     const doc = await fastify.prisma.document.findUnique({ where: { id: docId } })
     if (!doc || doc.candidateId !== candidateId) return reply.code(404).send({ error: 'Nicht gefunden' })
 
-    const storage = getStorage()
-    if (!storage) return reply.code(503).send({ error: 'Storage nicht konfiguriert' })
+    if (!storageConfigured()) return reply.code(503).send({ error: 'Storage nicht konfiguriert' })
 
-    const { data: signed, error } = await storage.storage
-      .from(DOCUMENTS_BUCKET)
-      .createSignedUrl(doc.storagePath, 120) // kurzlebiger, signierter Link (2 Min.)
-    if (error || !signed) return reply.code(404).send({ error: 'Datei nicht gefunden' })
+    const { url, error } = await createSignedUrl(doc.storagePath, 120) // kurzlebiger, signierter Link (2 Min.)
+    if (error || !url) return reply.code(404).send({ error: 'Datei nicht gefunden' })
 
-    return reply.redirect(signed.signedUrl)
+    return reply.redirect(url)
   })
 
   // ── Utility: Token für Kandidat generieren (intern, für E-Mails) ────────
