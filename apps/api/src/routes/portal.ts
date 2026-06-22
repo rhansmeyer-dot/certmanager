@@ -6,13 +6,9 @@
  * Jeder Kandidat bekommt einen eindeutigen Link
  */
 import { FastifyPluginAsync } from 'fastify'
-import { z } from 'zod'
 import { createHash } from 'crypto'
-import { pipeline } from 'stream/promises'
-import { createWriteStream, mkdirSync, existsSync } from 'fs'
-import { join, extname } from 'path'
-
-const UPLOADS_DIR = join(process.cwd(), 'uploads')
+import { extname } from 'path'
+import { getStorage, DOCUMENTS_BUCKET } from '../lib/storage'
 
 // Token generieren (URL-safe)
 function makeToken(candidateId: string): string {
@@ -274,9 +270,8 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
     const candidate = await fastify.prisma.candidate.findUnique({ where: { id: candidateId } })
     if (!candidate) return reply.code(404).send({ error: 'Nicht gefunden' })
 
-    // Ordner für Kandidat erstellen
-    const candidateDir = join(UPLOADS_DIR, candidateId)
-    if (!existsSync(candidateDir)) mkdirSync(candidateDir, { recursive: true })
+    const storage = getStorage()
+    if (!storage) return reply.code(503).send({ error: 'Dokument-Upload derzeit nicht verfügbar (Storage nicht konfiguriert).' })
 
     // Multipart File
     const data = await request.file()
@@ -285,19 +280,27 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
     const docType    = (data.fields as any).docType?.value || 'other'
     const ext        = extname(data.filename) || '.pdf'
     const filename   = `${docType}_${Date.now()}${ext}`
-    const storagePath = join(candidateDir, filename)
+    const objectPath = `${candidateId}/${filename}` // Pfad im privaten Supabase-Bucket (EU/Frankfurt)
 
-    await pipeline(data.file, createWriteStream(storagePath))
+    const buffer = await data.toBuffer()
 
-    // Document-Eintrag in DB
+    const { error: upErr } = await storage.storage
+      .from(DOCUMENTS_BUCKET)
+      .upload(objectPath, buffer, { contentType: data.mimetype, upsert: false })
+    if (upErr) {
+      fastify.log.error({ err: upErr }, 'Supabase Storage upload failed')
+      return reply.code(500).send({ error: 'Upload fehlgeschlagen' })
+    }
+
+    // Document-Eintrag in DB (storagePath = Bucket-Objektpfad)
     const doc = await fastify.prisma.document.create({
       data: {
         candidateId,
         documentType:  docType as any,
         displayName:   data.filename,
-        storagePath:   `uploads/${candidateId}/${filename}`,
+        storagePath:   objectPath,
         mimeType:      data.mimetype,
-        fileSizeBytes: data.file.bytesRead || 0,
+        fileSizeBytes: buffer.length,
       },
     })
 
@@ -325,8 +328,15 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
     const doc = await fastify.prisma.document.findUnique({ where: { id: docId } })
     if (!doc || doc.candidateId !== candidateId) return reply.code(404).send({ error: 'Nicht gefunden' })
 
-    const fullPath = join(process.cwd(), doc.storagePath)
-    return reply.sendFile(fullPath)
+    const storage = getStorage()
+    if (!storage) return reply.code(503).send({ error: 'Storage nicht konfiguriert' })
+
+    const { data: signed, error } = await storage.storage
+      .from(DOCUMENTS_BUCKET)
+      .createSignedUrl(doc.storagePath, 120) // kurzlebiger, signierter Link (2 Min.)
+    if (error || !signed) return reply.code(404).send({ error: 'Datei nicht gefunden' })
+
+    return reply.redirect(signed.signedUrl)
   })
 
   // ── Utility: Token für Kandidat generieren (intern, für E-Mails) ────────
