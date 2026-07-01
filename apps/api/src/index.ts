@@ -78,6 +78,18 @@ async function start() {
   // Health check
   server.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
+  // DB keep-alive: runs a trivial query so Supabase's free-tier idle timer
+  // (~7 days) never trips and pauses the project. Pinged by a scheduled job.
+  server.get('/health/db', async (_req, reply) => {
+    try {
+      await server.prisma.$queryRawUnsafe('select 1')
+      return { status: 'ok', db: 'reachable', timestamp: new Date().toISOString() }
+    } catch (err) {
+      reply.code(503)
+      return { status: 'error', db: 'unreachable' }
+    }
+  })
+
   const port = parseInt(process.env.PORT || '3000')
   const host = process.env.HOST || '0.0.0.0'
 
