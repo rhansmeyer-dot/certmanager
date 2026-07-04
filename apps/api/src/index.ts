@@ -101,7 +101,3 @@ start().catch((err) => {
   console.error(err)
   process.exit(1)
 })
-
-
-// redeploy marker: refresh env (admin hash) — 2026-07-04
-// env refresh 2
