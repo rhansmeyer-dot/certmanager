@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { createSignedUrl } from '../lib/storage'
 
 const documentMetaSchema = z.object({
   candidateId: z.string().uuid(),
@@ -24,6 +25,16 @@ export const documentRoutes: FastifyPluginAsync = async (fastify) => {
       include: { uploadedBy: { select: { fullName: true } } },
       orderBy: { uploadedAt: 'desc' },
     })
+  })
+
+  // GET /api/documents/:id/download — staff: short-lived signed URL to view/download a candidate file
+  fastify.get('/:id/download', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const doc = await fastify.prisma.document.findUnique({ where: { id } })
+    if (!doc) return reply.code(404).send({ error: 'Dokument nicht gefunden' })
+    const { url, error } = await createSignedUrl(doc.storagePath, 300) // 5 Minuten gültig
+    if (error || !url) return reply.code(404).send({ error: 'Datei nicht verfügbar' })
+    return { url, displayName: doc.displayName }
   })
 
   // POST /api/documents — save document metadata after upload

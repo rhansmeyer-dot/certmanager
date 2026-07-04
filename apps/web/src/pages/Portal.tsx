@@ -185,6 +185,13 @@ function StatusDashboard({ profile, candidateId, token }: any) {
   const STATUSES = PIPELINE.map(p => p.status)
   const currentIdx = STATUSES.indexOf(profile.status)
 
+  // Persist a document status change (declaration buttons); uploads persist via /upload themselves.
+  async function persistDoc(docType: string, status: string) {
+    try {
+      await api.post(`/portal/${candidateId}/${token}/document-status`, { documentType: docType, status })
+    } catch { /* non-blocking */ }
+  }
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -256,18 +263,22 @@ function StatusDashboard({ profile, candidateId, token }: any) {
       {/* Dokumente */}
       {profile.documentChecklist?.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
             <Folder className="w-4 h-4 text-blue-600" />
             Ihre Unterlagen
           </h3>
+          <p className="text-xs text-gray-500 mb-3">Laden Sie hier Ihre Dokumente hoch — das ist jederzeit möglich, auch nach dem Onboarding.</p>
           <div className="space-y-2">
             {profile.documentChecklist.map((d: any) => (
-              <div key={d.id} className={`flex items-center justify-between p-2.5 rounded-lg border text-sm ${STATUS_COLORS[d.status] || 'border-gray-200'}`}>
-                <span>{d.status === 'received' ? '✅' : d.status === 'requested' ? '⏳' : '❌'} {DOC_CONFIG[d.documentType]?.label || d.documentType}</span>
-                <span className="text-xs font-medium">
-                  {d.status === 'received' ? 'Erhalten' : d.status === 'requested' ? 'Ausstehend' : 'Fehlt'}
-                </span>
-              </div>
+              <DocUploadBlock
+                key={d.id}
+                candidateId={candidateId}
+                token={token}
+                docType={d.documentType}
+                config={DOC_CONFIG[d.documentType] || { label: d.documentType, hint: '', required: false }}
+                existing={d}
+                onUpdate={persistDoc}
+              />
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-3">
@@ -354,7 +365,7 @@ function OnboardingFlow({ profile, candidateId, token }: any) {
             </Field>
             <Field label="Vollständige Adresse" required hint="Straße, Hausnummer, PLZ, Stadt">
               <textarea value={form.fullAddress} onChange={e => set('fullAddress', e.target.value)} rows={2}
-                placeholder={`Musterstraße 1&#10;12345 Musterstadt`}
+                placeholder={"Musterstraße 1\n12345 Musterstadt"}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </Field>
             <Field label="Geburtsdatum" required>
@@ -450,7 +461,7 @@ function OnboardingFlow({ profile, candidateId, token }: any) {
 
             <button
               onClick={() => submitMutation.mutate()}
-              disabled={!form.fullAddress || !form.dateOfBirth || !form.residencePermit || submitMutation.isPending}
+              disabled={!form.fullAddress || !form.dateOfBirth || !form.residencePermit || !form.educationLevel || submitMutation.isPending}
               className="w-full bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
             >
               {submitMutation.isPending ? 'Wird übermittelt…' : '✅ Profil abschicken'}
@@ -462,21 +473,33 @@ function OnboardingFlow({ profile, candidateId, token }: any) {
         )}
 
         {/* Navigation */}
-        <div className="flex gap-3 mt-6">
-          {step > 1 && (
-            <button onClick={() => setStep(s => s - 1)}
-              className="flex items-center gap-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
-              <ChevronLeft className="w-4 h-4" /> Zurück
-            </button>
-          )}
-          <div className="flex-1" />
-          {step < 4 && (
-            <button onClick={() => setStep(s => s + 1)}
-              className="flex items-center gap-1 bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
-              Weiter <ChevronRight className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        {(() => {
+          const step1Valid = !!(form.fullAddress.trim() && form.dateOfBirth && form.residencePermit)
+          const step2Valid = !!form.educationLevel.trim()
+          const canAdvance = step === 1 ? step1Valid : step === 2 ? step2Valid : true
+          return (
+            <>
+              {!canAdvance && (
+                <p className="text-xs text-orange-600 mt-4 -mb-2">Bitte füllen Sie zuerst die Pflichtfelder (*) aus.</p>
+              )}
+              <div className="flex gap-3 mt-6">
+                {step > 1 && (
+                  <button onClick={() => setStep(s => s - 1)}
+                    className="flex items-center gap-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
+                    <ChevronLeft className="w-4 h-4" /> Zurück
+                  </button>
+                )}
+                <div className="flex-1" />
+                {step < 4 && (
+                  <button onClick={() => canAdvance && setStep(s => s + 1)} disabled={!canAdvance}
+                    className="flex items-center gap-1 bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                    Weiter <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </>
+          )
+        })()}
       </div>
     </div>
   )

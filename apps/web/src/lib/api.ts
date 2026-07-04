@@ -60,6 +60,8 @@ export const bundeslandApi = {
 export const documentsApi = {
   list: (candidateId?: string) =>
     api.get('/documents', { params: candidateId ? { candidateId } : {} }).then((r) => r.data),
+  downloadUrl: (id: string) =>
+    api.get(`/documents/${id}/download`).then((r) => r.data.url as string),
   create: (data: any) => api.post('/documents', data).then((r) => r.data),
   delete: (id: string) => api.delete(`/documents/${id}`),
   checklist: (candidateId: string) =>

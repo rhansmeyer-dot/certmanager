@@ -10,6 +10,16 @@ import { createHash } from 'crypto'
 import { extname } from 'path'
 import { storageConfigured, uploadObject, createSignedUrl } from '../lib/storage'
 
+// Erlaubte Werte (Schutz gegen ungültige Eingaben → sonst Prisma-500)
+const DOC_TYPES = ['cv', 'contract_unsigned', 'contract_signed', 'apostille',
+  'language_certificate', 'legal_language_cert', 'sample_translation',
+  'embassy_letter', 'court_application', 'court_correspondence', 'other'] as const
+const CHECKLIST_STATUSES = ['received', 'requested', 'missing_critical', 'not_required'] as const
+const ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png'] as const
+const ALLOWED_MIME = ['application/pdf', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg', 'image/png'] as const
+
 // Token generieren (URL-safe)
 function makeToken(candidateId: string): string {
   const secret = process.env.JWT_SECRET || 'certmanager-secret'
@@ -91,6 +101,15 @@ export const portalRoutes: FastifyPluginAsync = async (fastify) => {
     })
     if (!candidate) return reply.code(404).send({ error: 'Nicht gefunden' })
 
+    // Guard: kein Doppel-Signieren, kein "Vorspulen" eines inaktiven/abgeschlossenen Vorgangs.
+    if (candidate.status === 'dropped') {
+      return reply.code(409).send({ error: 'Dieser Vorgang ist nicht mehr aktiv.' })
+    }
+    if (candidate.status === 'contract_signed' || candidate.contracts[0]?.status === 'signed') {
+      return reply.code(409).send({ error: 'Der Vertrag wurde bereits unterzeichnet.' })
+    }
+
+    const fromStatus = candidate.status
     const now = new Date()
 
     // Contract als signed markieren
@@ -129,7 +148,7 @@ IP: ${(request as any).ip || 'unbekannt'}`,
     await fastify.prisma.pipelineEvent.create({
       data: {
         candidateId,
-        fromStatus:  'contract_sent',
+        fromStatus:  fromStatus,
         toStatus:    'contract_signed',
         isAutomated: true,
         notes:       `Digitale Unterzeichnung via Kandidaten-Portal. Unterschrift: "${signatureName}"`,
@@ -167,6 +186,8 @@ Nächste Schritte (DORA startet):
     const { documentType, status, notes } = request.body as { documentType: string; status: string; notes?: string }
 
     if (!verifyToken(candidateId, token)) return reply.code(403).send({ error: 'Ungültiger Link' })
+    if (!DOC_TYPES.includes(documentType as any)) return reply.code(400).send({ error: 'Ungültiger Dokumenttyp.' })
+    if (!CHECKLIST_STATUSES.includes(status as any)) return reply.code(400).send({ error: 'Ungültiger Status.' })
 
     const existing = await fastify.prisma.documentChecklist.findUnique({
       where: { candidateId_documentType: { candidateId, documentType: documentType as any } },
@@ -200,6 +221,14 @@ Nächste Schritte (DORA startet):
     const body = request.body as any
     const now  = new Date()
 
+    // Geburtsdatum validieren (sonst: new Date(NaN) → Prisma-500)
+    let dob: Date | undefined = undefined
+    if (body.dateOfBirth) {
+      const parsed = new Date(body.dateOfBirth)
+      if (isNaN(parsed.getTime())) return reply.code(400).send({ error: 'Ungültiges Geburtsdatum.' })
+      dob = parsed
+    }
+
     // Alle gesammelten Daten in den Kandidaten schreiben
     await fastify.prisma.candidate.update({
       where: { id: candidateId },
@@ -207,7 +236,7 @@ Nächste Schritte (DORA startet):
         // Persönliche Daten
         phone:            body.phone        || undefined,
         fullAddress:      body.fullAddress  || undefined,
-        dateOfBirth:      body.dateOfBirth  ? new Date(body.dateOfBirth) : undefined,
+        dateOfBirth:      dob,
         residencePermit:  body.residencePermit || undefined,
         deutschLevel:     body.deutschLevel || undefined,
         // Qualifikation (ergänzen wenn leer)
@@ -216,7 +245,7 @@ Nächste Schritte (DORA startet):
         translationYears: body.translationYears ? Number(body.translationYears) : undefined,
         // Onboarding abgeschlossen
         onboardingCompletedAt: now,
-        notes: (await fastify.prisma.candidate.findUnique({ where: { id: candidateId }, select: { notes: true } }))?.notes
+        notes: ((await fastify.prisma.candidate.findUnique({ where: { id: candidateId }, select: { notes: true } }))?.notes || '')
           + `\n\n[${now.toLocaleDateString('de-DE')} — Kandidaten-Onboarding abgeschlossen]
 Aufenthaltstitel: ${body.residencePermit || 'nicht angegeben'}
 Adresse: ${body.fullAddress || 'nicht angegeben'}
@@ -276,8 +305,16 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
     const data = await request.file()
     if (!data) return reply.code(400).send({ error: 'Keine Datei' })
 
-    const docType    = (data.fields as any).docType?.value || 'other'
-    const ext        = extname(data.filename) || '.pdf'
+    // Validierung VOR dem Upload (sonst: verwaiste Bucket-Datei + 500)
+    const docType = (data.fields as any).docType?.value || 'other'
+    if (!DOC_TYPES.includes(docType)) {
+      return reply.code(400).send({ error: 'Ungültiger Dokumenttyp.' })
+    }
+    const ext = (extname(data.filename) || '.pdf').toLowerCase()
+    if (!ALLOWED_EXT.includes(ext as any) || (data.mimetype && !ALLOWED_MIME.includes(data.mimetype as any))) {
+      return reply.code(415).send({ error: 'Dateityp nicht erlaubt. Bitte PDF, Word, JPG oder PNG hochladen.' })
+    }
+
     const filename   = `${docType}_${Date.now()}${ext}`
     const objectPath = `${candidateId}/${filename}` // Pfad im privaten Supabase-Bucket (EU/Frankfurt)
 

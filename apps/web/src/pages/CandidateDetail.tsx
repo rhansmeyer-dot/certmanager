@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Globe, Phone, Mail, User, ChevronRight, Sparkles, Send, Link2, FileText, CheckSquare, Printer } from 'lucide-react'
 import { useState } from 'react'
-import { candidatesApi, aiApi, portalApi, antonApi } from '@/lib/api'
+import { candidatesApi, aiApi, portalApi, antonApi, documentsApi } from '@/lib/api'
 import { STATUS_LABELS, STATUS_COLORS, DIFFICULTY_COLORS, DIFFICULTY_LABELS, cn, formatDate, formatRelative } from '@/lib/utils'
 
 const NEXT_STATUS: Record<string, string> = {
@@ -419,6 +419,35 @@ export default function CandidateDetailPage() {
                     {item.receivedAt && (
                       <span className="text-xs text-gray-400">{formatDate(item.receivedAt)}</span>
                     )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Uploaded files (from candidate portal → Supabase Storage) */}
+          {candidate.documents?.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Hochgeladene Dateien ({candidate.documents.length})</h3>
+              <div className="space-y-1.5">
+                {candidate.documents.map((doc: any) => (
+                  <div key={doc.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0 gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                      <span className="text-sm text-gray-700 truncate">{doc.displayName}</span>
+                      <span className="text-xs text-gray-400 flex-shrink-0 capitalize">{doc.documentType.replace(/_/g, ' ')}</span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const url = await documentsApi.downloadUrl(doc.id)
+                          if (url) window.open(url, '_blank', 'noopener')
+                        } catch { alert('Datei konnte nicht geöffnet werden.') }
+                      }}
+                      className="text-xs text-blue-600 hover:underline flex-shrink-0 whitespace-nowrap"
+                    >
+                      Öffnen ↗
+                    </button>
                   </div>
                 ))}
               </div>

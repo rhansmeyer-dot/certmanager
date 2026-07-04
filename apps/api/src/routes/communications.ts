@@ -122,31 +122,44 @@ export const communicationRoutes: FastifyPluginAsync = async (fastify) => {
     })
     if (!comm) return reply.code(404).send({ error: 'Communication not found' })
 
-    // Send email via Resend
+    // Idempotency guard: never re-send an already-sent communication.
+    if (comm.status === 'sent') {
+      return reply.code(409).send({ error: 'Diese Nachricht wurde bereits gesendet.' })
+    }
+
+    // For email channel we must actually send — no silent success.
     let resendId: string | undefined
-    if (resend && comm.channel === 'email' && comm.toAddresses.length > 0) {
+    if (comm.channel === 'email') {
+      if (!resend) {
+        return reply.code(503).send({ error: 'E-Mail-Versand nicht konfiguriert (RESEND_API_KEY fehlt).' })
+      }
+      if (comm.toAddresses.length === 0) {
+        return reply.code(400).send({ error: 'Keine Empfängeradresse hinterlegt.' })
+      }
       try {
-        const { data } = await resend.emails.send({
+        const { data, error } = await resend.emails.send({
           from: `speak2 <info@speak2.de>`,
           to: comm.toAddresses,
           cc: comm.ccAddresses.length > 0 ? comm.ccAddresses : undefined,
           subject: comm.subject || '(Kein Betreff)',
           html: comm.bodyHtml || '',
         })
+        if (error) throw error
         resendId = data?.id
       } catch (err) {
-        fastify.log.error('Resend error:', err)
-        return reply.code(500).send({ error: 'E-Mail-Versand fehlgeschlagen' })
+        fastify.log.error({ err }, 'Resend send failed')
+        return reply.code(502).send({ error: 'E-Mail-Versand fehlgeschlagen' })
       }
     }
 
+    // Only reached if the email actually sent (or channel is phone/letter = logged manually).
     const updated = await fastify.prisma.communication.update({
       where: { id },
       data: {
-        status: resend ? 'sent' : 'draft',
+        status: 'sent',
         approvedById: user.id,
         approvedAt: new Date(),
-        sentAt: resend ? new Date() : undefined,
+        sentAt: new Date(),
         resendMessageId: resendId,
       },
     })

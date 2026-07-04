@@ -15,6 +15,9 @@ const intakeSchema = z.object({
   // Sprache
   nativeLanguage:  z.string().min(1),
   deutschLevel:    z.string().min(1),   // A1-C2 / Muttersprache
+  deutschCert:     z.string().optional(),        // Deutsch-Zertifikat (telc/Goethe/...)
+  languageDetails: z.string().optional(),        // JSON aller angegebenen Sprachen
+  languages:       z.array(z.record(z.any())).optional(), // Rohliste aller Sprachen
   yearsInGermany:  z.number().min(0),
   germanCitizen:   z.boolean(),
   citizenshipYear: z.number().optional(), // falls beantragt: Jahr der Einbürgerung
@@ -168,6 +171,9 @@ Antworte NUR mit JSON:
 
 STAATSANGEHÖRIGKEIT: ${data.germanCitizen ? 'Deutsch ✅' : `NICHT DEUTSCH ⚠️ (${data.countryOfOrigin})`}
 ${data.citizenshipYear ? `Einbürgerung beantragt, erwartet: ${data.citizenshipYear}` : ''}
+
+SPRACHEN (alle Angaben): ${data.languageDetails || JSON.stringify(data.languages || []) || '—'}
+DEUTSCH-ZERTIFIKAT: ${data.deutschCert || '—'}
 
 ${assessment ? `
 === SIEGFRIED-BEWERTUNG ===

@@ -9,7 +9,7 @@ const loginSchema = z.object({
 
 // Simple password hash for MVP (use bcrypt in production)
 function hashPassword(password: string): string {
-  return createHash('sha256').update(password + process.env.PASSWORD_SALT || 'certmanager-salt').digest('hex')
+  return createHash('sha256').update(password + (process.env.PASSWORD_SALT || 'certmanager-salt')).digest('hex')
 }
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -29,11 +29,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     // In production: use bcrypt
     const passwordHash = hashPassword(password)
 
-    // Per-user passwords via env vars, fallback to admin123
+    // Per-user password hash via env var. No universal fallback: if a user has
+    // no configured hash, login is denied (previously fell back to "admin123").
     const envKey = `USER_HASH_${email.replace(/[@.]/g, c => c === '@' ? '_AT_' : '_DOT_')}`
-    const storedHash = process.env[envKey] || hashPassword('admin123')
+    const storedHash = process.env[envKey]
 
-    if (passwordHash !== storedHash) {
+    if (!storedHash || passwordHash !== storedHash) {
       return reply.code(401).send({ error: 'Ungültige E-Mail oder Passwort' })
     }
 
