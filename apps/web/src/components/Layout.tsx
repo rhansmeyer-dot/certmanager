@@ -2,13 +2,14 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, Users, Mail, FileText, Euro,
-  Scale, LogOut, Bell, Phone, Printer,
+  Scale, LogOut, Bell, Phone, Printer, CheckSquare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { authApi, aiApi } from '@/lib/api'
 
 const adminNavItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/tasks', icon: CheckSquare, label: 'Aufgaben' },
   { to: '/candidates', icon: Users, label: 'Kandidaten' },
   { to: '/communications', icon: Mail, label: 'Kommunikation' },
   { to: '/documents', icon: FileText, label: 'Dokumente' },
@@ -18,11 +19,13 @@ const adminNavItems = [
 
 const thomasNavItems = [
   { to: '/dashboard', icon: Phone, label: 'Meine Anruf-Tasks' },
+  { to: '/tasks', icon: CheckSquare, label: 'Aufgaben' },
   { to: '/candidates', icon: Users, label: 'Kandidaten (Ansicht)' },
 ]
 
 const dianaNavItems = [
   { to: '/dashboard', icon: Printer, label: 'Meine Aufgaben' },
+  { to: '/tasks', icon: CheckSquare, label: 'Aufgaben' },
 ]
 
 export default function Layout() {

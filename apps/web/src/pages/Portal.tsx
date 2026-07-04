@@ -577,6 +577,8 @@ export default function PortalPage() {
 
         <p className="text-center text-xs text-gray-400 mt-6">
           speak2 · Paderborn · <a href="mailto:info@speak2.de" className="underline">info@speak2.de</a>
+          <br />
+          <a href="/impressum" className="underline">Impressum</a> · <a href="/datenschutz" className="underline">Datenschutz</a>
         </p>
       </div>
     </div>

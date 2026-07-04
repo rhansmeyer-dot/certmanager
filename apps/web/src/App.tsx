@@ -12,6 +12,8 @@ import CommunicationsPage from './pages/Communications'
 import DocumentsPage from './pages/Documents'
 import FinancesPage from './pages/Finances'
 import BundeslandPage from './pages/Bundesland'
+import TasksPage from './pages/Tasks'
+import { ImpressumPage, DatenschutzPage } from './pages/Legal'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -25,6 +27,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/bewerber" element={<IntakePage />} />
       <Route path="/portal/:candidateId/:token" element={<PortalPage />} />
+      <Route path="/impressum" element={<ImpressumPage />} />
+      <Route path="/datenschutz" element={<DatenschutzPage />} />
       <Route
         path="/"
         element={
@@ -35,6 +39,7 @@ export default function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="tasks" element={<TasksPage />} />
         <Route path="candidates" element={<CandidatesPage />} />
         <Route path="candidates/new" element={<NewCandidatePage />} />
         <Route path="candidates/:id" element={<CandidateDetailPage />} />

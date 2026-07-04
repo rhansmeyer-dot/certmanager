@@ -17,9 +17,13 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     return fastify.prisma.task.findMany({
       where: {
         ...(candidateId ? { candidateId } : {}),
-        ...(status ? { status } : { status: { not: 'done' } }),
         ...(assignedToId ? { assignedToId } : {}),
-        ...(overdue === 'true' ? { dueAt: { lt: now }, status: 'pending' } : {}),
+        ...(overdue === 'true'
+          ? { dueAt: { lt: now }, status: 'pending' }
+          : status
+            ? { status }
+            // Default: hide done + cancelled; also hide snoozed until the snooze expires.
+            : { status: { notIn: ['done', 'cancelled'] }, NOT: { AND: [{ status: 'snoozed' }, { snoozeUntil: { gt: now } }] } }),
       },
       include: {
         candidate: { select: { id: true, firstName: true, lastName: true, candidateRef: true } },

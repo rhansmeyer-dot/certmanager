@@ -674,6 +674,8 @@ export default function IntakePage() {
 
         <p className="text-center text-xs text-gray-400 mt-4">
           speak2 · Paderborn · Ihre Daten werden vertraulich behandelt
+          <br />
+          <a href="/impressum" className="underline">Impressum</a> · <a href="/datenschutz" className="underline">Datenschutz</a>
         </p>
       </div>
     </div>
