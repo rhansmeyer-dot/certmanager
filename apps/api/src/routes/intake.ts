@@ -309,6 +309,12 @@ Bitte anrufen und folgende Punkte klären:
 
 async function generateRef(prisma: any): Promise<string> {
   const year = new Date().getFullYear()
-  const count = await prisma.candidate.count()
-  return `SP-${year}-${String(count + 1).padStart(3, '0')}`
+  const prefix = `SP-${year}-`
+  const last = await prisma.candidate.findFirst({
+    where: { candidateRef: { startsWith: prefix } },
+    orderBy: { candidateRef: 'desc' },
+    select: { candidateRef: true },
+  })
+  const lastNum = last ? parseInt(last.candidateRef.slice(prefix.length)) || 0 : 0
+  return `${prefix}${String(lastNum + 1).padStart(3, '0')}`
 }

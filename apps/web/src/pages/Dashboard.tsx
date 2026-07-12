@@ -157,7 +157,7 @@ export default function DashboardPage() {
           </p>
         </div>
         <button
-          onClick={() => navigate('/candidates?new=1')}
+          onClick={() => navigate('/candidates/new')}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
         >
           + Kandidat hinzufügen

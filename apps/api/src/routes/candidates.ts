@@ -33,11 +33,19 @@ const updateCandidateSchema = createCandidateSchema.partial().extend({
   automationPausedUntil: z.string().datetime().optional(),
 })
 
-// Generate candidate reference: SP-2026-001
+// Generate candidate reference: SP-2026-001.
+// Derives from the highest existing ref for the year (not count()), so deleting a
+// candidate can't cause a duplicate ref. Callers should retry on P2002 for concurrency.
 async function generateCandidateRef(prisma: any): Promise<string> {
   const year = new Date().getFullYear()
-  const count = await prisma.candidate.count()
-  return `SP-${year}-${String(count + 1).padStart(3, '0')}`
+  const prefix = `SP-${year}-`
+  const last = await prisma.candidate.findFirst({
+    where: { candidateRef: { startsWith: prefix } },
+    orderBy: { candidateRef: 'desc' },
+    select: { candidateRef: true },
+  })
+  const lastNum = last ? parseInt(last.candidateRef.slice(prefix.length)) || 0 : 0
+  return `${prefix}${String(lastNum + 1).padStart(3, '0')}`
 }
 
 export const candidateRoutes: FastifyPluginAsync = async (fastify) => {
