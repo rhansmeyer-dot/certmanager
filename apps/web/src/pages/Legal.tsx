@@ -33,8 +33,8 @@ export function ImpressumPage() {
       <h2>Angaben gemäß § 5 DDG</h2>
       <p>
         speak2 – Ramón Hansmeyer<br />
-        [Straße und Hausnummer — bitte ergänzen]<br />
-        [PLZ] Paderborn<br />
+        Winfriedstr. 4<br />
+        33098 Paderborn<br />
         Deutschland
       </p>
       <h2>Kontakt</h2>
@@ -44,9 +44,6 @@ export function ImpressumPage() {
       </p>
       <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
       <p>Ramón Hansmeyer, Anschrift wie oben.</p>
-      <p className="text-xs text-gray-400 pt-2">
-        Hinweis: Umsatzsteuer-Identifikationsnummer bzw. weitere Pflichtangaben ggf. ergänzen.
-      </p>
     </LegalShell>
   )
 }
@@ -56,7 +53,7 @@ export function DatenschutzPage() {
     <LegalShell title="Datenschutzerklärung">
       <h2>1. Verantwortlicher</h2>
       <p>
-        speak2 – Ramón Hansmeyer, [Anschrift wie im Impressum], E-Mail: info@speak2.de.
+        speak2 – Ramón Hansmeyer, Winfriedstr. 4, 33098 Paderborn, E-Mail: info@speak2.de.
       </p>
 
       <h2>2. Welche Daten wir verarbeiten</h2>
