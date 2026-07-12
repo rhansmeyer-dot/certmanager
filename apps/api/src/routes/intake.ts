@@ -135,7 +135,7 @@ Antworte NUR mit JSON:
           assessment = JSON.parse(cleaned)
         }
       } catch (e) {
-        fastify.log.error('Siegfried error:', e)
+        fastify.log.error({ err: e }, 'Siegfried assessment failed')
       }
     }
 

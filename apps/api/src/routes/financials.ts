@@ -55,16 +55,16 @@ export const financialRoutes: FastifyPluginAsync = async (fastify) => {
       totalInvested,
       totalRevenue,
       netPosition: totalRevenue - totalInvested,
-      byCandidate: byCandidateInv.map((inv) => {
-        const rev = byCandidateRev.find((r) => r.candidateId === inv.candidateId)
-        const invested = Number(inv._sum.amountEur || 0)
+      // Union of both sets so candidates with revenue but no investment aren't dropped.
+      byCandidate: Array.from(new Set([
+        ...byCandidateInv.map((i) => i.candidateId),
+        ...byCandidateRev.map((r) => r.candidateId),
+      ])).map((candidateId) => {
+        const inv = byCandidateInv.find((i) => i.candidateId === candidateId)
+        const rev = byCandidateRev.find((r) => r.candidateId === candidateId)
+        const invested = Number(inv?._sum.amountEur || 0)
         const earned = Number(rev?._sum.speak2ShareEur || 0)
-        return {
-          candidateId: inv.candidateId,
-          invested,
-          earned,
-          netPosition: earned - invested,
-        }
+        return { candidateId, invested, earned, netPosition: earned - invested }
       }),
     }
   })
