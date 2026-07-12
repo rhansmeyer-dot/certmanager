@@ -66,12 +66,18 @@ Erstelle ein formelles Anschreiben mit:
 
 Schreibe auf Deutsch, professionell und präzise. NUR den Brieftext, keine Erklärungen.`
 
-      const anschreibenRes = await client.messages.create({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: anschreibenPrompt }],
-      })
-      anschreiben = (anschreibenRes.content[0] as any).text
+      try {
+        const anschreibenRes = await client.messages.create({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: anschreibenPrompt }],
+        })
+        const block = anschreibenRes.content[0]
+        anschreiben = block && block.type === 'text' ? block.text : '[Anschreiben konnte nicht generiert werden]'
+      } catch (err) {
+        fastify.log.error({ err }, 'ANTON Anschreiben generation failed')
+        return reply.code(502).send({ error: 'Anschreiben-Generierung fehlgeschlagen — bitte erneut versuchen.' })
+      }
 
       // Ergänzende Erklärung (Formular-Daten)
       ergaenzendeErklaerung = `ERGÄNZENDE ERKLÄRUNG
@@ -176,15 +182,25 @@ Rechtsgrundlage: ${bl?.legalBasisCitation || 'GDolmG §4'}`,
     })
     if (!candidate) return reply.code(404).send({ error: 'Nicht gefunden' })
 
-    // Extrahiere Anschreiben aus Notizen
+    // Extrahiere das ZULETZT generierte Antragspaket aus den Notizen.
+    // (ANTON hängt bei jeder Regenerierung einen neuen Block an — wir nehmen den letzten.)
     const notes = candidate.notes || ''
-    const anschreibenMatch = notes.match(/=== ANSCHREIBEN ===([\s\S]*?)=== ERGÄNZENDE ERKLÄRUNG ===/)
-    const erklaerungMatch  = notes.match(/=== ERGÄNZENDE ERKLÄRUNG ===([\s\S]*)$/)
+    const startIdx = notes.lastIndexOf('=== ANSCHREIBEN ===')
+    let anschreiben: string | null = null
+    let ergaenzendeErklaerung: string | null = null
+    if (startIdx !== -1) {
+      const tail = notes.slice(startIdx)
+      const aMatch = tail.match(/=== ANSCHREIBEN ===([\s\S]*?)=== ERGÄNZENDE ERKLÄRUNG ===/)
+      // Erklärung endet am nächsten angehängten Notiz-Block ("\n\n[") oder am Ende.
+      const eMatch = tail.match(/=== ERGÄNZENDE ERKLÄRUNG ===([\s\S]*?)(?:\n\n\[|$)/)
+      anschreiben = aMatch ? aMatch[1].trim() : null
+      ergaenzendeErklaerung = eMatch ? eMatch[1].trim() : null
+    }
 
     return {
       hasPackage:            notes.includes('[ANTON'),
-      anschreiben:           anschreibenMatch ? anschreibenMatch[1].trim() : null,
-      ergaenzendeErklaerung: erklaerungMatch  ? erklaerungMatch[1].trim()  : null,
+      anschreiben,
+      ergaenzendeErklaerung,
       courtName:             candidate.bundesland?.courtName,
       bundesland:            candidate.bundesland,
     }
@@ -206,6 +222,18 @@ Rechtsgrundlage: ${bl?.legalBasisCitation || 'GDolmG §4'}`,
       include: { bundesland: true },
     })
     if (!candidate) return reply.code(404).send({ error: 'Nicht gefunden' })
+
+    // Guards: nur einmal freigeben, nur mit vorhandenem Paket, nicht bei abgeschlossenem/inaktivem Vorgang.
+    if (candidate.status === 'certification_in_progress' || candidate.status === 'certified') {
+      return reply.code(409).send({ error: 'Antragspaket wurde bereits freigegeben.' })
+    }
+    if (candidate.status === 'dropped') {
+      return reply.code(409).send({ error: 'Dieser Vorgang ist nicht mehr aktiv.' })
+    }
+    if (!(candidate.notes || '').includes('=== ANSCHREIBEN ===')) {
+      return reply.code(400).send({ error: 'Kein Antragspaket vorhanden — bitte zuerst generieren.' })
+    }
+    const fromStatus = candidate.status
 
     const bl = candidate.bundesland
     const diana = await fastify.prisma.user.findFirst({ where: { email: 'diana@speak2.de' } })
@@ -283,7 +311,7 @@ MAX erstellt dann automatisch den nächsten Check in 3 Wochen.`,
     await fastify.prisma.pipelineEvent.create({
       data: {
         candidateId,
-        fromStatus:    'contract_signed',
+        fromStatus:    fromStatus,
         toStatus:      'certification_in_progress',
         triggeredById: user.id,
         isAutomated:   false,

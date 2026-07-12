@@ -18,7 +18,7 @@ const DOC_CONFIG: Record<string, { label: string; hint: string; required: boolea
   language_certificate: { label: 'Deutschzertifikat (C1 oder höher)', hint: 'z.B. telc, Goethe, TestDaF', required: true },
   apostille:            { label: 'Ausländische Zeugnisse mit Apostille', hint: 'Alle Hochschulabschlüsse aus dem Heimatland', required: true },
   sample_translation:   { label: 'Probeübersetzungen (Portfolio)', hint: '3–5 Beispielübersetzungen in beide Richtungen', required: false },
-  embassy_letter:       { label: 'Empfehlungsschreiben (z.B. Botschaft)', hint: 'Hilfreich für Brandenburg und andere BL', required: false },
+  embassy_letter:       { label: 'Empfehlungsschreiben (z.B. Botschaft)', hint: 'Kann den Antrag unterstützen (in einigen Bundesländern)', required: false },
   other:                { label: 'Sonstige Unterlagen', hint: 'Alles weitere was relevant sein könnte', required: false },
 }
 
