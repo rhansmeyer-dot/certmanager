@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Ping DB keep-alive endpoint
         env:
-          API_URL: https://certmanagerapi-production.up.railway.app
+          API_URL: https://certmanager-api.onrender.com
         run: |
           for i in 1 2 3; do
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$API_URL/health/db") || code=000
