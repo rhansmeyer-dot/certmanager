@@ -23,6 +23,98 @@ const NEXT_ACTION_LABELS: Record<string, string> = {
   certification_in_progress: 'Zertifizierung abgeschlossen ✓',
 }
 
+// ── Postfach Panel — Nachrichten mit dem Kandidaten ────────────────────────
+function PostboxPanel({ candidateId, candidateName, dropped }: { candidateId: string; candidateName: string; dropped: boolean }) {
+  const queryClient = useQueryClient()
+  const [body, setBody] = useState('')
+  const [subject, setSubject] = useState('')
+
+  const { data } = useQuery({
+    queryKey: ['candidate-messages', candidateId],
+    queryFn: () => candidatesApi.messages(candidateId),
+    enabled: !!candidateId,
+  })
+
+  const sendMutation = useMutation({
+    mutationFn: () => candidatesApi.sendMessage(candidateId, { subject: subject || undefined, body }),
+    onSuccess: () => {
+      setBody(''); setSubject('')
+      queryClient.invalidateQueries({ queryKey: ['candidate-messages', candidateId] })
+    },
+  })
+
+  const messages = data?.messages ?? []
+  const unread = data?.unreadFromCandidate ?? 0
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <h3 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1.5">
+        <Mail className="w-4 h-4 text-blue-600" />
+        Postfach ({messages.length})
+        {unread > 0 && (
+          <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full font-medium">
+            {unread} unbeantwortet
+          </span>
+        )}
+      </h3>
+      <p className="text-xs text-gray-500 mb-3">Nachrichten im Kandidaten-Portal — der Kandidat sieht sie beim nächsten Login.</p>
+
+      {messages.length > 0 && (
+        <div className="space-y-2 mb-4 max-h-96 overflow-y-auto pr-1">
+          {messages.map((m: any) => {
+            const fromUs = m.direction === 'outbound'
+            return (
+              <div key={m.id} className={cn('rounded-lg p-3 border text-sm',
+                fromUs ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-200 ml-4')}>
+                <div className="flex items-baseline justify-between gap-2 mb-1">
+                  <span className={cn('text-xs font-semibold', fromUs ? 'text-blue-800' : 'text-amber-800')}>
+                    {fromUs ? (m.authorName || 'speak2') : candidateName}
+                  </span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">
+                    {formatDate(m.createdAt)}
+                    {fromUs && (m.readAt ? ' · gelesen' : ' · ungelesen')}
+                  </span>
+                </div>
+                {m.subject && <p className="font-semibold text-gray-900 text-xs mb-1">{m.subject}</p>}
+                <p className="text-gray-700 whitespace-pre-wrap text-xs leading-relaxed">{m.body}</p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {dropped ? (
+        <p className="text-xs text-gray-400 italic">Kandidat ausgeschieden — keine Nachrichten möglich.</p>
+      ) : (
+        <div className="border-t border-gray-100 pt-3 space-y-2">
+          <input
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            placeholder="Betreff (optional)"
+            className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <textarea
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            placeholder="Nachricht an den Kandidaten…"
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+          />
+          {sendMutation.isError && <p className="text-xs text-red-600">Senden fehlgeschlagen.</p>}
+          <button
+            onClick={() => sendMutation.mutate()}
+            disabled={!body.trim() || sendMutation.isPending}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1.5"
+          >
+            <Send className="w-3 h-3" />
+            {sendMutation.isPending ? 'Wird gesendet…' : 'Ins Postfach legen'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── ANTON Panel — Antragspaket ─────────────────────────────────────────────
 function AntonPanel({ candidateId, status }: { candidateId: string; status: string }) {
   const queryClient = useQueryClient()
@@ -367,6 +459,13 @@ export default function CandidateDetailPage() {
 
         {/* Main Content */}
         <div className="col-span-3 space-y-4">
+          {/* Postfach */}
+          <PostboxPanel
+            candidateId={id!}
+            candidateName={`${candidate.firstName} ${candidate.lastName}`}
+            dropped={candidate.status === 'dropped'}
+          />
+
           {/* Pipeline Timeline */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Pipeline-Verlauf</h3>

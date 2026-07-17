@@ -273,6 +273,64 @@ export const candidateRoutes: FastifyPluginAsync = async (fastify) => {
 
     return calculatePriorityScore(candidate)
   })
+
+  // ── Postfach (Team-Seite) ───────────────────────────────────────────────
+
+  // GET /api/candidates/:id/messages — Verlauf lesen
+  fastify.get('/:id/messages', {
+    preHandler: [fastify.authenticate],
+  }, async (request) => {
+    const { id } = request.params as { id: string }
+    const messages = await fastify.prisma.portalMessage.findMany({
+      where: { candidateId: id },
+      orderBy: { createdAt: 'asc' },
+      include: { createdBy: { select: { fullName: true } } },
+    })
+    return {
+      messages,
+      // ungelesen = vom Kandidaten geschickt, vom Team noch nicht gelesen
+      unreadFromCandidate: messages.filter(m => m.direction === 'inbound' && !m.readAt).length,
+    }
+  })
+
+  // POST /api/candidates/:id/messages — Nachricht an Kandidat senden
+  fastify.post('/:id/messages', {
+    preHandler: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { subject, body } = request.body as { subject?: string; body?: string }
+    const user = request.user as { id: string; fullName?: string }
+
+    const text = typeof body === 'string' ? body.trim() : ''
+    if (!text) return reply.code(400).send({ error: 'Nachricht darf nicht leer sein' })
+
+    const candidate = await fastify.prisma.candidate.findUnique({ where: { id } })
+    if (!candidate) return reply.code(404).send({ error: 'Kandidat nicht gefunden' })
+    if (candidate.status === 'dropped') {
+      return reply.code(409).send({ error: 'Kandidat ist ausgeschieden — keine Nachrichten möglich' })
+    }
+
+    const author = await fastify.prisma.user.findUnique({ where: { id: user.id } })
+
+    const message = await fastify.prisma.portalMessage.create({
+      data: {
+        candidateId: id,
+        direction:   'outbound',
+        subject:     typeof subject === 'string' && subject.trim() ? subject.trim().slice(0, 200) : null,
+        body:        text,
+        authorName:  author?.fullName || 'speak2',
+        createdById: user.id,
+      },
+    })
+
+    // eingehende Nachrichten des Kandidaten gelten mit unserer Antwort als gelesen
+    await fastify.prisma.portalMessage.updateMany({
+      where: { candidateId: id, direction: 'inbound', readAt: null },
+      data:  { readAt: new Date() },
+    })
+
+    return message
+  })
 }
 
 // Auto-create tasks when status changes

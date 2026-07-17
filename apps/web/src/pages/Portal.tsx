@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Scale, CheckCircle, FileText, Upload, Clock, AlertCircle,
   ChevronRight, ChevronLeft, User, MapPin, BookOpen, Folder,
+  Mail, Send,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 
@@ -162,6 +163,133 @@ function DocUploadBlock({ candidateId, token, docType, config, existing, onUpdat
 }
 
 // ── Status-Dashboard (nach Onboarding) ────────────────────────────────────
+// ── Postfach ───────────────────────────────────────────────────────────────
+function formatDate(iso: string) {
+  const d = new Date(iso)
+  const today = new Date()
+  const isToday = d.toDateString() === today.toDateString()
+  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  if (isToday) return `Heute, ${time} Uhr`
+  const yesterday = new Date(today.getTime() - 86400000)
+  if (d.toDateString() === yesterday.toDateString()) return `Gestern, ${time} Uhr`
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + `, ${time} Uhr`
+}
+
+function Postbox({ candidateId, token }: any) {
+  const queryClient = useQueryClient()
+  const [reply, setReply] = useState('')
+  const [sent, setSent] = useState(false)
+  const markedRef = useRef(false)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['portal-messages', candidateId],
+    queryFn: () => api.get(`/portal/${candidateId}/${token}/messages`).then(r => r.data),
+    refetchInterval: 60000,
+  })
+
+  const sendMutation = useMutation({
+    mutationFn: () => api.post(`/portal/${candidateId}/${token}/messages`, { body: reply }).then(r => r.data),
+    onSuccess: () => {
+      setReply('')
+      setSent(true)
+      queryClient.invalidateQueries({ queryKey: ['portal-messages', candidateId] })
+      setTimeout(() => setSent(false), 6000)
+    },
+  })
+
+  const messages = data?.messages ?? []
+  const unread = data?.unreadCount ?? 0
+
+  // Nachrichten von speak2 als gelesen markieren (einmal pro Sitzung)
+  if (unread > 0 && !markedRef.current) {
+    markedRef.current = true
+    api.post(`/portal/${candidateId}/${token}/messages/read`, {})
+      .then(() => queryClient.invalidateQueries({ queryKey: ['portal-messages', candidateId] }))
+      .catch(() => { markedRef.current = false })
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <h3 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+        <Mail className="w-4 h-4 text-blue-600" />
+        Postfach
+        {unread > 0 && (
+          <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full font-medium">
+            {unread} neu
+          </span>
+        )}
+      </h3>
+      <p className="text-xs text-gray-500 mb-4">
+        Hier finden Sie alle Nachrichten von speak2 zu Ihrem Verfahren — und können uns direkt antworten.
+      </p>
+
+      {isLoading ? (
+        <p className="text-sm text-gray-400 py-4">Wird geladen…</p>
+      ) : messages.length === 0 ? (
+        <p className="text-sm text-gray-400 py-4">Noch keine Nachrichten.</p>
+      ) : (
+        <div className="space-y-3 mb-5 max-h-[32rem] overflow-y-auto pr-1">
+          {messages.map((m: any) => {
+            const fromUs = m.direction === 'outbound'
+            return (
+              <div
+                key={m.id}
+                className={`rounded-xl p-4 border ${
+                  fromUs
+                    ? `bg-blue-50 border-blue-100 ${!m.readAt ? 'ring-1 ring-blue-300' : ''}`
+                    : 'bg-gray-50 border-gray-100 ml-6'
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                  <span className={`text-xs font-semibold ${fromUs ? 'text-blue-800' : 'text-gray-600'}`}>
+                    {fromUs ? (m.authorName || 'speak2') : 'Sie'}
+                  </span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.createdAt)}</span>
+                </div>
+                {m.subject && (
+                  <p className={`text-sm font-semibold mb-1 ${fromUs ? 'text-gray-900' : 'text-gray-700'}`}>
+                    {m.subject}
+                  </p>
+                )}
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{m.body}</p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {sent && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-3 flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+          <p className="text-sm text-green-800">Ihre Nachricht ist bei uns eingegangen. Wir antworten in der Regel innerhalb von zwei Werktagen.</p>
+        </div>
+      )}
+
+      <div className="border-t border-gray-100 pt-4">
+        <textarea
+          value={reply}
+          onChange={e => setReply(e.target.value)}
+          placeholder="Ihre Nachricht an speak2 — Fragen, Rückmeldungen, alles was Ihr Verfahren betrifft…"
+          rows={3}
+          maxLength={5000}
+          className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+        />
+        {sendMutation.isError && (
+          <p className="text-xs text-red-600 mt-1">Konnte nicht gesendet werden. Bitte versuchen Sie es erneut.</p>
+        )}
+        <button
+          onClick={() => sendMutation.mutate()}
+          disabled={!reply.trim() || sendMutation.isPending}
+          className="mt-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-medium text-sm hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center gap-2"
+        >
+          <Send className="w-4 h-4" />
+          {sendMutation.isPending ? 'Wird gesendet…' : 'Nachricht senden'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function StatusDashboard({ profile, candidateId, token }: any) {
   const signed = profile.contract?.status === 'signed'
   const [sigName, setSigName] = useState('')
@@ -198,6 +326,9 @@ function StatusDashboard({ profile, candidateId, token }: any) {
         <h2 className="text-lg font-bold text-gray-900 mb-1">Willkommen zurück, {profile.firstName}!</h2>
         <p className="text-sm text-gray-500">{profile.languagePair}{profile.bundesland ? ` · ${profile.bundesland.name}` : ''}</p>
       </div>
+
+      {/* Postfach */}
+      <Postbox candidateId={candidateId} token={token} />
 
       {/* Fortschritt */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">

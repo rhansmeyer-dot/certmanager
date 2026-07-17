@@ -370,6 +370,89 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
     return reply.redirect(url)
   })
 
+  // ── POSTFACH ────────────────────────────────────────────────────────────
+
+  // GET /api/portal/:candidateId/:token/messages — Postfach laden
+  fastify.get('/:candidateId/:token/messages', async (request, reply) => {
+    const { candidateId, token } = request.params as { candidateId: string; token: string }
+    if (!verifyToken(candidateId, token)) return reply.code(403).send({ error: 'Ungültiger Link' })
+
+    const messages = await fastify.prisma.portalMessage.findMany({
+      where: { candidateId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    })
+
+    return {
+      messages: messages.map(m => ({
+        id:         m.id,
+        direction:  m.direction,
+        subject:    m.subject,
+        body:       m.body,
+        authorName: m.direction === 'outbound' ? (m.authorName || 'speak2') : null,
+        readAt:     m.readAt,
+        createdAt:  m.createdAt,
+      })),
+      // ungelesen = von speak2 gesendet, vom Kandidaten noch nicht geöffnet
+      unreadCount: messages.filter(m => m.direction === 'outbound' && !m.readAt).length,
+    }
+  })
+
+  // POST /api/portal/:candidateId/:token/messages — Kandidat schreibt uns
+  fastify.post('/:candidateId/:token/messages', async (request, reply) => {
+    const { candidateId, token } = request.params as { candidateId: string; token: string }
+    const { body, subject } = request.body as { body?: string; subject?: string }
+
+    if (!verifyToken(candidateId, token)) return reply.code(403).send({ error: 'Ungültiger Link' })
+
+    const text = typeof body === 'string' ? body.trim() : ''
+    if (!text) return reply.code(400).send({ error: 'Nachricht darf nicht leer sein' })
+    if (text.length > 5000) return reply.code(400).send({ error: 'Nachricht zu lang (max. 5000 Zeichen)' })
+
+    const candidate = await fastify.prisma.candidate.findUnique({ where: { id: candidateId } })
+    if (!candidate) return reply.code(404).send({ error: 'Nicht gefunden' })
+
+    const message = await fastify.prisma.portalMessage.create({
+      data: {
+        candidateId,
+        direction:  'inbound',
+        subject:    typeof subject === 'string' && subject.trim() ? subject.trim().slice(0, 200) : null,
+        body:       text,
+        authorName: `${candidate.firstName} ${candidate.lastName}`.trim(),
+      },
+    })
+
+    // Aufgabe für das Team: eingehende Nachricht beantworten
+    try {
+      await fastify.prisma.task.create({
+        data: {
+          candidateId,
+          title:       `📬 Postfach: Nachricht von ${candidate.firstName} ${candidate.lastName} beantworten`,
+          description: text.slice(0, 500),
+          priority:    'high',
+          dueAt:       new Date(Date.now() + 2 * 86400000),
+          isAutomated: true,
+        },
+      })
+    } catch (e) {
+      fastify.log.error({ err: e }, 'Postfach: Folgeaufgabe konnte nicht erstellt werden')
+    }
+
+    return { id: message.id, createdAt: message.createdAt }
+  })
+
+  // POST /api/portal/:candidateId/:token/messages/read — als gelesen markieren
+  fastify.post('/:candidateId/:token/messages/read', async (request, reply) => {
+    const { candidateId, token } = request.params as { candidateId: string; token: string }
+    if (!verifyToken(candidateId, token)) return reply.code(403).send({ error: 'Ungültiger Link' })
+
+    const { count } = await fastify.prisma.portalMessage.updateMany({
+      where: { candidateId, direction: 'outbound', readAt: null },
+      data:  { readAt: new Date() },
+    })
+    return { marked: count }
+  })
+
   // ── Utility: Token für Kandidat generieren (intern, für E-Mails) ────────
   fastify.get('/token/:candidateId', {
     preHandler: [fastify.authenticate],

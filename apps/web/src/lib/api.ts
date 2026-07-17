@@ -41,6 +41,9 @@ export const candidatesApi = {
   updateStatus: (id: string, status: string, notes?: string) =>
     api.patch(`/candidates/${id}/status`, { status, notes }).then((r) => r.data),
   priority: (id: string) => api.get(`/candidates/${id}/priority`).then((r) => r.data),
+  messages: (id: string) => api.get(`/candidates/${id}/messages`).then((r) => r.data),
+  sendMessage: (id: string, data: { subject?: string; body: string }) =>
+    api.post(`/candidates/${id}/messages`, data).then((r) => r.data),
 }
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────

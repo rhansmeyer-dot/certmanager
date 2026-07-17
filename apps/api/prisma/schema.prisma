@@ -141,6 +141,7 @@ model User {
   financialRecords    FinancialRecord[]
   createdContracts    Contract[]
   updatedBundesland   BundeslandRule[]
+  portalMessages      PortalMessage[]
 
   @@map("users")
 }
@@ -245,6 +246,7 @@ model Candidate {
   financialRecords  FinancialRecord[]
   contracts         Contract[]
   aiUpdates         AiUpdateQueue[]
+  portalMessages    PortalMessage[]
 
   @@map("candidates")
 }
@@ -456,4 +458,22 @@ model Contract {
   updatedAt         DateTime       @updatedAt
 
   @@map("contracts")
+}
+
+// ── Postfach: Nachrichten zwischen speak2 und Kandidat (im Portal) ──────────
+model PortalMessage {
+  id          String                 @id @default(uuid())
+  candidateId String
+  candidate   Candidate              @relation(fields: [candidateId], references: [id])
+  direction   CommunicationDirection @default(outbound) // outbound = speak2 → Kandidat
+  subject     String?
+  body        String
+  authorName  String?                // Anzeigename ggü. Kandidat, z.B. "Ramón Hansmeyer"
+  createdById String?
+  createdBy   User?                  @relation(fields: [createdById], references: [id])
+  readAt      DateTime?              // wann der Empfänger sie gelesen hat
+  createdAt   DateTime               @default(now())
+
+  @@index([candidateId, createdAt])
+  @@map("portal_messages")
 }
