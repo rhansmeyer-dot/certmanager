@@ -139,10 +139,15 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   // POST /api/auth/reset-password — neues Passwort mit Token setzen
   fastify.post('/reset-password', async (request, reply) => {
-    const { token, password } = z.object({
+    const parsed = z.object({
       token: z.string().min(10),
       password: z.string().min(8, 'Passwort muss mindestens 8 Zeichen haben'),
-    }).parse(request.body)
+    }).safeParse(request.body)
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message || 'Ungültige Eingabe'
+      return reply.code(400).send({ error: msg })
+    }
+    const { token, password } = parsed.data
 
     const user = await fastify.prisma.user.findFirst({
       where: { resetTokenHash: sha256(token), resetTokenExpiresAt: { gt: new Date() } },
@@ -218,7 +223,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/users/:id/set-password', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     if (!(await requireAdmin(request, reply))) return
     const { id } = request.params as { id: string }
-    const { password } = z.object({ password: z.string().min(8) }).parse(request.body)
+    const parsed = z.object({ password: z.string().min(8, 'Passwort muss mindestens 8 Zeichen haben') }).safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message || 'Ungültige Eingabe' })
+    const { password } = parsed.data
     const user = await fastify.prisma.user.findUnique({ where: { id } })
     if (!user) return reply.code(404).send({ error: 'Nutzer nicht gefunden' })
 
