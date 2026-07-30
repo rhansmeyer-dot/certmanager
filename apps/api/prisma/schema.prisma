@@ -126,6 +126,9 @@ model User {
   fullName    String
   role        UserRole @default(staff)
   avatarUrl   String?
+  passwordHash        String?   // sha256(password + PASSWORD_SALT); wenn null → Fallback auf USER_HASH_* env
+  resetTokenHash      String?   // sha256(reset-token) — Klartext-Token nie gespeichert
+  resetTokenExpiresAt DateTime?
   createdAt   DateTime @default(now())
   lastLoginAt DateTime?
 

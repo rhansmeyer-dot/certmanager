@@ -29,6 +29,14 @@ export const authApi = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }).then((r) => r.data),
   me: () => api.get('/auth/me').then((r) => r.data),
+  forgotPassword: (email: string) =>
+    api.post('/auth/forgot-password', { email }).then((r) => r.data),
+  resetPassword: (token: string, password: string) =>
+    api.post('/auth/reset-password', { token, password }).then((r) => r.data),
+  users: () => api.get('/auth/users').then((r) => r.data),
+  resetLink: (id: string) => api.post(`/auth/users/${id}/reset-link`, {}).then((r) => r.data),
+  setPassword: (id: string, password: string) =>
+    api.post(`/auth/users/${id}/set-password`, { password }).then((r) => r.data),
 }
 
 // ─── Candidates ─────────────────────────────────────────────────────────────

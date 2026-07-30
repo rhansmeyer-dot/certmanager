@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Scale } from 'lucide-react'
 import { authApi } from '@/lib/api'
 
@@ -83,6 +83,12 @@ export default function LoginPage() {
               {loading ? 'Anmelden...' : 'Anmelden'}
             </button>
           </form>
+
+          <div className="mt-4 text-center">
+            <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700 hover:underline">
+              Passwort vergessen?
+            </Link>
+          </div>
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-4">

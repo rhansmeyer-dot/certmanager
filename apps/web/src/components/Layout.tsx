@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, Users, Mail, FileText, Euro,
-  Scale, LogOut, Bell, Phone, Printer, CheckSquare,
+  Scale, LogOut, Bell, Phone, Printer, CheckSquare, KeyRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { authApi, aiApi } from '@/lib/api'
@@ -15,6 +15,7 @@ const adminNavItems = [
   { to: '/documents', icon: FileText, label: 'Dokumente' },
   { to: '/finances', icon: Euro, label: 'Finanzen' },
   { to: '/bundesland', icon: Scale, label: 'Rechtsbibliothek' },
+  { to: '/team', icon: KeyRound, label: 'Team & Zugänge' },
 ]
 
 const thomasNavItems = [
@@ -52,7 +53,7 @@ export default function Layout() {
   }
 
   const role = me?.role || 'staff'
-  const isThomas = me?.email === 'thomas@speak2.de'
+  const isThomas = me?.email === 'thomas.schlegtendal@transcura.de' || me?.email === 'thomas@speak2.de'
   const isDiana = me?.email === 'diana@speak2.de'
 
   const navItems = isThomas ? thomasNavItems

@@ -13,7 +13,9 @@ import DocumentsPage from './pages/Documents'
 import FinancesPage from './pages/Finances'
 import BundeslandPage from './pages/Bundesland'
 import TasksPage from './pages/Tasks'
+import TeamPage from './pages/Team'
 import { ImpressumPage, DatenschutzPage } from './pages/Legal'
+import { ForgotPasswordPage, ResetPasswordPage } from './pages/ResetPassword'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -25,6 +27,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/bewerber" element={<IntakePage />} />
       <Route path="/portal/:candidateId/:token" element={<PortalPage />} />
       <Route path="/impressum" element={<ImpressumPage />} />
@@ -47,6 +51,7 @@ export default function App() {
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="finances" element={<FinancesPage />} />
         <Route path="bundesland" element={<BundeslandPage />} />
+        <Route path="team" element={<TeamPage />} />
       </Route>
     </Routes>
   )
