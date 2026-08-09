@@ -198,6 +198,59 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }))
   })
 
+  // POST /api/auth/users — Admin legt einen neuen Zugang an
+  //
+  // Bisher entstanden Nutzer ausschließlich im Seed oder per Einmal-Skript in
+  // prisma/ (add-marushka.ts & Co.) — jeder neue Kollege war damit ein Deploy.
+  // Der Zugang wird ohne Passwort angelegt; die Person vergibt es selbst über
+  // den zurückgegebenen Reset-Link (gleiche 1-Stunden-TTL wie /reset-link).
+  fastify.post('/users', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    if (!(await requireAdmin(request, reply))) return
+
+    const parsed = z.object({
+      email:    z.string().email('Bitte eine gültige E-Mail-Adresse angeben'),
+      fullName: z.string().trim().min(1, 'Name darf nicht leer sein').max(120),
+      role:     z.enum(['staff', 'admin']).default('staff'),
+    }).safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message || 'Ungültige Eingabe' })
+    }
+    const email = normalizeEmail(parsed.data.email)
+
+    const existing = await fastify.prisma.user.findUnique({ where: { email } })
+    if (existing) {
+      return reply.code(409).send({ error: `Es gibt bereits einen Zugang für ${email}.` })
+    }
+
+    const rawToken = randomBytes(32).toString('hex')
+    const user = await fastify.prisma.user.create({
+      data: {
+        email,
+        fullName:            parsed.data.fullName.trim(),
+        role:                parsed.data.role,
+        resetTokenHash:      sha256(rawToken),
+        resetTokenExpiresAt: new Date(Date.now() + RESET_TTL_MS),
+      },
+    })
+
+    const baseUrl  = process.env.FRONTEND_URL || 'http://localhost:5173'
+    const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`
+
+    // Wenn E-Mail-Versand konfiguriert ist, bekommt die Person den Link direkt;
+    // sonst gibt ihn der Admin aus der Antwort weiter (interne Kleinstnutzung).
+    const emailed = await sendResetEmail(user.email, user.fullName, resetUrl)
+
+    return reply.code(201).send({
+      id:       user.id,
+      email:    user.email,
+      fullName: user.fullName,
+      role:     user.role,
+      emailed,
+      resetUrl,
+      expiresInMinutes: RESET_TTL_MS / 60000,
+    })
+  })
+
   // POST /api/auth/users/:id/reset-link — Admin erzeugt Reset-Link zum Weitergeben
   fastify.post('/users/:id/reset-link', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     if (!(await requireAdmin(request, reply))) return

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { KeyRound, Link2, Copy, Check, ShieldCheck, Clock } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { KeyRound, Link2, Copy, Check, ShieldCheck, Clock, UserPlus } from 'lucide-react'
 import { authApi } from '@/lib/api'
 import { formatRelative } from '@/lib/utils'
 
@@ -29,11 +29,119 @@ export default function TeamPage() {
         Reset-Link zum Weitergeben — oder setzen direkt ein neues Passwort.
       </p>
 
+      <NewUserForm />
+
       {isLoading ? (
         <p className="text-sm text-gray-400">Wird geladen…</p>
       ) : (
         <div className="space-y-3">
           {users.map((u: any) => <UserRow key={u.id} user={u} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NewUserForm() {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<'staff' | 'admin'>('staff')
+  const [created, setCreated] = useState<any>(null)
+  const [copied, setCopied] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: () => authApi.createUser({ fullName, email, role }),
+    onSuccess: (d) => {
+      setCreated(d)
+      setFullName(''); setEmail(''); setRole('staff')
+      queryClient.invalidateQueries({ queryKey: ['team-users'] })
+    },
+  })
+
+  function copy() {
+    navigator.clipboard.writeText(created.resetUrl).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mb-6 text-sm bg-blue-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-blue-700 flex items-center gap-1.5"
+      >
+        <UserPlus className="w-4 h-4" /> Neuen Zugang anlegen
+      </button>
+    )
+  }
+
+  return (
+    <div className="mb-6 bg-white rounded-xl border border-gray-200 p-4">
+      <p className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <UserPlus className="w-4 h-4 text-blue-600" /> Neuen Zugang anlegen
+      </p>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        <input
+          value={fullName} onChange={e => setFullName(e.target.value)}
+          placeholder="Vor- und Nachname"
+          className="text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <input
+          type="email" value={email} onChange={e => setEmail(e.target.value)}
+          placeholder="name@speak2.de"
+          className="text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <select
+          value={role} onChange={e => setRole(e.target.value as 'staff' | 'admin')}
+          className="text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="staff">Mitarbeiter (wie Thomas)</option>
+          <option value="admin">Administrator</option>
+        </select>
+      </div>
+
+      <div className="flex items-center gap-2 mt-3">
+        <button
+          onClick={() => mutation.mutate()}
+          disabled={!fullName.trim() || !email.trim() || mutation.isPending}
+          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-40"
+        >
+          {mutation.isPending ? '…' : 'Anlegen'}
+        </button>
+        <button
+          onClick={() => { setOpen(false); setCreated(null); mutation.reset() }}
+          className="text-xs border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50"
+        >
+          Abbrechen
+        </button>
+        <p className="text-xs text-gray-400">
+          Kein Passwort nötig — die Person vergibt es selbst über den Link.
+        </p>
+      </div>
+
+      {mutation.isError && (
+        <p className="text-xs text-red-600 mt-2">
+          {(mutation.error as any)?.response?.data?.error || 'Anlegen fehlgeschlagen.'}
+        </p>
+      )}
+
+      {created && (
+        <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg p-3">
+          <p className="text-xs text-blue-800 mb-1 font-medium">
+            {created.fullName} angelegt ({created.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}).
+            {created.emailed
+              ? ' Der Link zum Passwort-Setzen wurde per E-Mail verschickt.'
+              : ` Link (${created.expiresInMinutes} Min. gültig) weitergeben:`}
+          </p>
+          <div className="flex items-center gap-2">
+            <input readOnly value={created.resetUrl} className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1.5 text-gray-700" />
+            <button onClick={copy} className="text-xs bg-blue-600 text-white px-2.5 py-1.5 rounded flex items-center gap-1 hover:bg-blue-700">
+              {copied ? <><Check className="w-3.5 h-3.5" />Kopiert</> : <><Copy className="w-3.5 h-3.5" />Kopieren</>}
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -34,6 +34,8 @@ export const authApi = {
   resetPassword: (token: string, password: string) =>
     api.post('/auth/reset-password', { token, password }).then((r) => r.data),
   users: () => api.get('/auth/users').then((r) => r.data),
+  createUser: (data: { email: string; fullName: string; role?: 'staff' | 'admin' }) =>
+    api.post('/auth/users', data).then((r) => r.data),
   resetLink: (id: string) => api.post(`/auth/users/${id}/reset-link`, {}).then((r) => r.data),
   setPassword: (id: string, password: string) =>
     api.post(`/auth/users/${id}/set-password`, { password }).then((r) => r.data),
