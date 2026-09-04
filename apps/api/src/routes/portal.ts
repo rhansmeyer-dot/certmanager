@@ -9,6 +9,7 @@ import { FastifyPluginAsync } from 'fastify'
 import { createHash } from 'crypto'
 import { extname } from 'path'
 import { storageConfigured, uploadObject, createSignedUrl } from '../lib/storage'
+import { publicBaseUrl } from '../lib/urls'
 
 // Erlaubte Werte (Schutz gegen ungültige Eingaben → sonst Prisma-500)
 const DOC_TYPES = ['cv', 'contract_unsigned', 'contract_signed', 'apostille',
@@ -459,7 +460,7 @@ Zusätzliche Angaben: ${body.additionalInfo || 'keine'}`,
   }, async (request) => {
     const { candidateId } = request.params as { candidateId: string }
     const token = makeToken(candidateId)
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+    const baseUrl = publicBaseUrl()
     return {
       token,
       portalUrl:    `${baseUrl}/portal/${candidateId}/${token}`,

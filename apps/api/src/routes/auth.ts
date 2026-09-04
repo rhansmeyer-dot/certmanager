@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { createHash, randomBytes } from 'crypto'
 import { Resend } from 'resend'
+import { publicBaseUrl } from '../lib/urls'
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -112,7 +113,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       data: { resetTokenHash: sha256(rawToken), resetTokenExpiresAt: new Date(Date.now() + RESET_TTL_MS) },
     })
 
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+    const baseUrl = publicBaseUrl()
     const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`
     const emailed = await sendResetEmail(user.email, user.fullName, resetUrl)
 
@@ -233,7 +234,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       },
     })
 
-    const baseUrl  = process.env.FRONTEND_URL || 'http://localhost:5173'
+    const baseUrl = publicBaseUrl()
     const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`
 
     // Wenn E-Mail-Versand konfiguriert ist, bekommt die Person den Link direkt;
@@ -263,7 +264,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       where: { id: user.id },
       data: { resetTokenHash: sha256(rawToken), resetTokenExpiresAt: new Date(Date.now() + RESET_TTL_MS) },
     })
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+    const baseUrl = publicBaseUrl()
     return {
       resetUrl: `${baseUrl}/reset-password?token=${rawToken}`,
       expiresInMinutes: RESET_TTL_MS / 60000,
