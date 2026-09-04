@@ -93,8 +93,11 @@ function DocUploadBlock({ candidateId, token, docType, config, existing, onUpdat
       const form = new FormData()
       form.append('file', file)
       form.append('docType', docType)
+      // Content-Type NICHT manuell setzen: der Browser muss die multipart-boundary
+      // selbst ergänzen. 'undefined' überschreibt den JSON-Default der axios-Instanz,
+      // sonst → 500 "Multipart: Boundary not found".
       await api.post(`/portal/${candidateId}/${token}/upload`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': undefined },
       })
       setLocalFile(file.name)
       setLocalStatus('received')
