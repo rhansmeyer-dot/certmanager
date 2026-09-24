@@ -165,6 +165,60 @@ function DocUploadBlock({ candidateId, token, docType, config, existing, onUpdat
   )
 }
 
+// ── Weitere/zusätzliche Unterlagen (immer verfügbar, auch wenn Checkliste komplett) ──
+function MoreDocsUploader({ candidateId, token }: any) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploaded, setUploaded] = useState<string[]>([])
+  const [error, setError] = useState('')
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true); setError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('docType', 'other')
+      // Content-Type NICHT setzen — Browser ergänzt die multipart-boundary selbst.
+      await api.post(`/portal/${candidateId}/${token}/upload`, form, { headers: { 'Content-Type': undefined } })
+      setUploaded(prev => [...prev, file.name])
+    } catch {
+      setError('Upload fehlgeschlagen — bitte erneut versuchen.')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = '' // gleiche Datei erneut wählbar
+    }
+  }
+
+  return (
+    <div className="border border-dashed border-blue-300 rounded-xl p-4 bg-blue-50/40 mt-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-800">➕ Weitere Unterlagen hochladen</p>
+          <p className="text-xs text-gray-500 mt-0.5">Lebenslauf, zusätzliche Zeugnisse oder alles Weitere — jederzeit möglich.</p>
+        </div>
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="flex-shrink-0 flex items-center gap-1.5 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        >
+          <Upload className="w-3 h-3" />
+          {uploading ? 'Lädt…' : 'Datei wählen'}
+        </button>
+      </div>
+      <input ref={fileRef} type="file" onChange={handleUpload} className="hidden"
+        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" />
+      {uploaded.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {uploaded.map((n, i) => <p key={i} className="text-xs text-green-700">✓ {n} hochgeladen</p>)}
+        </div>
+      )}
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+    </div>
+  )
+}
+
 // ── Status-Dashboard (nach Onboarding) ────────────────────────────────────
 // ── Postfach ───────────────────────────────────────────────────────────────
 function formatDate(iso: string) {
@@ -269,6 +323,9 @@ function Postbox({ candidateId, token }: any) {
       )}
 
       <div className="border-t border-gray-100 pt-4">
+        <p className="text-xs text-gray-500 mb-2">
+          📎 Dokumente (Lebenslauf, Zeugnisse …) laden Sie bitte weiter unten unter <b>„Ihre Unterlagen"</b> hoch — hier im Postfach sind nur Textnachrichten möglich.
+        </p>
         <textarea
           value={reply}
           onChange={e => setReply(e.target.value)}
@@ -394,27 +451,30 @@ function StatusDashboard({ profile, candidateId, token }: any) {
         </div>
       )}
 
-      {/* Dokumente */}
-      {profile.documentChecklist?.length > 0 && (
+      {/* Dokumente — immer sichtbar, damit auch zusätzliche Unterlagen hochladbar sind */}
+      {(
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
             <Folder className="w-4 h-4 text-blue-600" />
             Ihre Unterlagen
           </h3>
           <p className="text-xs text-gray-500 mb-3">Laden Sie hier Ihre Dokumente hoch — das ist jederzeit möglich, auch nach dem Onboarding.</p>
-          <div className="space-y-2">
-            {profile.documentChecklist.map((d: any) => (
-              <DocUploadBlock
-                key={d.id}
-                candidateId={candidateId}
-                token={token}
-                docType={d.documentType}
-                config={DOC_CONFIG[d.documentType] || { label: d.documentType, hint: '', required: false }}
-                existing={d}
-                onUpdate={persistDoc}
-              />
-            ))}
-          </div>
+          {profile.documentChecklist?.length > 0 && (
+            <div className="space-y-2">
+              {profile.documentChecklist.map((d: any) => (
+                <DocUploadBlock
+                  key={d.id}
+                  candidateId={candidateId}
+                  token={token}
+                  docType={d.documentType}
+                  config={DOC_CONFIG[d.documentType] || { label: d.documentType, hint: '', required: false }}
+                  existing={d}
+                  onUpdate={persistDoc}
+                />
+              ))}
+            </div>
+          )}
+          <MoreDocsUploader candidateId={candidateId} token={token} />
           <p className="text-xs text-gray-400 mt-3">
             Fragen? <a href="mailto:info@speak2.de" className="text-blue-600 underline">info@speak2.de</a>
           </p>
